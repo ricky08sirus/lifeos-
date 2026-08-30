@@ -1,0 +1,41 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+# Dependencies
+node_modules/
+
+# Environment variables — NEVER commit real secrets/connection strings
+.env
+.env.local
+.env.*.local
+
+# Prisma
+# (only needed if you ever switch back to the "prisma-client" TS generator,
+# which outputs here instead of node_modules/@prisma/client)
+/generated/prisma/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build output
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Test coverage
+coverage/
+
+# Backup files created during troubleshooting
+*.bak

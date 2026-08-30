@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  // Profile fields (for PATCH /users/me)
+  displayName       String?
+  dateOfBirth       DateTime?
+  heightCm          Float?
+  sexAtBirth        String?
+  activityLevel     String?
+  dietType          String?
+  restingHrBaseline Int?
+
+  preference    Preference?
+  goal          Goal?
+  refreshTokens RefreshToken[]
+  resetTokens   PasswordResetToken[]
+}
+
+model Preference {
+  id           String @id @default(uuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id])
+  currencyCode String @default("INR")
+  locale       String @default("en-IN")
+  dateFormat   String @default("dd/MM/yyyy")
+  units        String @default("metric")
+  weekStartsOn String @default("monday")
+}
+
+model Goal {
+  id                String  @id @default(uuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id])
+  primaryGoal       String?
+  targetWeightKg    Float?
+  dailyCalories     Int?
+  dailyProteinG     Int?
+  dailyCarbsG       Int?
+  dailyFatG         Int?
+  dailyWaterMl      Int?
+  dailySleepMinutes Int?
+  workoutsPerWeek   Int?
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}
