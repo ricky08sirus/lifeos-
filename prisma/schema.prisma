@@ -33,6 +33,12 @@ model User {
   goal          Goal?
   refreshTokens RefreshToken[]
   resetTokens   PasswordResetToken[]
+
+  weights      Weight[]
+  measurements Measurement[]
+  sleepEntries SleepEntry[]
+  wellbeing    WellbeingEntry[]
+  vitals       Vital[]
 }
 
 model Preference {
@@ -79,3 +85,72 @@ model PasswordResetToken {
   usedAt    DateTime?
   createdAt DateTime @default(now())
 }
+
+
+model Weight {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  kg        Float
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model Measurement {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  site      String   // waist, chest, arm, thigh, shoulders...
+  valueCm   Float
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([userId, site])
+}
+
+model SleepEntry {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  date             DateTime
+  durationMinutes  Int
+  quality          Int?     // 1-5
+  interruptions    Int?
+  bedtime          DateTime?
+  wake             DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model WellbeingEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  mood      Int?     // 1-5
+  stress    Int?
+  energy    Int?
+  soreness  Int?
+  fatigue   Int?
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model Vital {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  kind       String   // "resting_heart_rate" | "blood_pressure"
+  value      Int?     // used for resting_heart_rate
+  systolic   Int?     // used for blood_pressure
+  diastolic  Int?     // used for blood_pressure
+  recordedAt DateTime @default(now())
+
+  @@index([userId, kind, recordedAt])
+}
+

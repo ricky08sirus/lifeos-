@@ -5,6 +5,8 @@ const requestLogger = require('./middleware/requestLogger');
 const authRouter = require('./routes/auth');
 const usersRouter = require('./routes/users');
 const adminRouter = require('./routes/admin');
+const healthRouter = require('./routes/health');
+
 
 const app = express();
 
@@ -14,6 +16,7 @@ app.use(requestLogger);
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
 app.use('/admin', adminRouter);
+app.use('/health', healthRouter);
 
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', {
