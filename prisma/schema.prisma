@@ -39,6 +39,11 @@ model User {
   sleepEntries SleepEntry[]
   wellbeing    WellbeingEntry[]
   vitals       Vital[]
+
+  medications   Medication[]
+  appointments  Appointment[]
+  photos        Photo[]
+  medicalRecords MedicalRecord[]
 }
 
 model Preference {
@@ -153,4 +158,58 @@ model Vital {
 
   @@index([userId, kind, recordedAt])
 }
+
+
+model Medication {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  name           String
+  isPrescription Boolean   @default(false)
+  dosage         String?
+  frequency      String?
+  quantityLeft   Int?
+  refillOn       DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Appointment {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  title        String
+  scheduledAt  DateTime
+  provider     String?
+  location     String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, scheduledAt])
+}
+
+model Photo {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  storagePath String
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model MedicalRecord {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  storagePath String
+  url         String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
 
