@@ -1,259 +1,3 @@
-# #!/usr/bin/perl
-# use strict;
-# use warnings;
-# use HTTP::Tiny;   # core module, ships with Perl - no install needed
-# use JSON::PP;     # core module, ships with Perl - no install needed
-
-# my $BASE_URL = 'http://localhost:3000';
-# my $http = HTTP::Tiny->new;
-# my $json = JSON::PP->new->utf8;
-
-# my $email    = 'test' . time() . '@example.com';  # unique each run, avoids 409 conflicts
-# my $password = 'password123';
-
-# my $pass_count = 0;
-# my $fail_count = 0;
-
-# sub section {
-#     my ($title) = @_;
-#     print "\n", "=" x 60, "\n";
-#     print "$title\n";
-#     print "=" x 60, "\n";
-# }
-
-# sub check {
-#     my ($label, $condition) = @_;
-#     if ($condition) {
-#         print "PASS - $label\n";
-#         $pass_count++;
-#     } else {
-#         print "FAIL - $label\n";
-#         $fail_count++;
-#     }
-# }
-
-# sub show {
-#     my ($res) = @_;
-#     print "Status: $res->{status}\n";
-#     print "Body:   $res->{content}\n";
-# }
-
-# # ---------------------------------------------------------------
-# section("1. POST /auth/register");
-# # ---------------------------------------------------------------
-# my $register_res = $http->post(
-#     "$BASE_URL/auth/register",
-#     {
-#         headers => { 'Content-Type' => 'application/json' },
-#         content => $json->encode({ email => $email, password => $password }),
-#     }
-# );
-# show($register_res);
-
-# my ($access_token, $refresh_token);
-# if ($register_res->{status} == 201) {
-#     my $data = $json->decode($register_res->{content});
-#     $access_token  = $data->{accessToken};
-#     $refresh_token = $data->{refreshToken};
-#     check("register returns 201 with accessToken + refreshToken", $access_token && $refresh_token);
-# } else {
-#     check("register returns 201", 0);
-# }
-
-# # ---------------------------------------------------------------
-# section("2. POST /auth/login");
-# # ---------------------------------------------------------------
-# my $login_res = $http->post(
-#     "$BASE_URL/auth/login",
-#     {
-#         headers => { 'Content-Type' => 'application/json' },
-#         content => $json->encode({ email => $email, password => $password }),
-#     }
-# );
-# show($login_res);
-
-# if ($login_res->{status} == 200) {
-#     my $data = $json->decode($login_res->{content});
-#     $access_token  = $data->{accessToken};
-#     $refresh_token = $data->{refreshToken};
-#     check("login returns 200 with accessToken + refreshToken", $access_token && $refresh_token);
-# } else {
-#     check("login returns 200", 0);
-# }
-
-# die "\nNo access token available - cannot continue. Fix register/login first.\n" unless $access_token;
-
-# # ---------------------------------------------------------------
-# section("3. GET /users/me");
-# # ---------------------------------------------------------------
-# my $me_res = $http->get(
-#     "$BASE_URL/users/me",
-#     { headers => { 'Authorization' => "Bearer $access_token" } }
-# );
-# show($me_res);
-# check("GET /users/me returns 200", $me_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("4. PATCH /users/me");
-# # ---------------------------------------------------------------
-# my $patch_res = $http->request(
-#     'PATCH',
-#     "$BASE_URL/users/me",
-#     {
-#         headers => {
-#             'Authorization' => "Bearer $access_token",
-#             'Content-Type'  => 'application/json',
-#         },
-#         content => $json->encode({
-#             displayName   => 'Test User',
-#             heightCm      => 175,
-#             activityLevel => 'moderate',
-#             dietType      => 'lacto_vegetarian',
-#         }),
-#     }
-# );
-# show($patch_res);
-# check("PATCH /users/me returns 200", $patch_res->{status} == 200);
-# if ($patch_res->{status} == 200) {
-#     my $data = $json->decode($patch_res->{content});
-#     check("displayName was actually updated", ($data->{displayName} // '') eq 'Test User');
-# }
-
-# # ---------------------------------------------------------------
-# section("5. GET /users/me/preferences");
-# # ---------------------------------------------------------------
-# my $prefs_get_res = $http->get(
-#     "$BASE_URL/users/me/preferences",
-#     { headers => { 'Authorization' => "Bearer $access_token" } }
-# );
-# show($prefs_get_res);
-# check("GET /users/me/preferences returns 200", $prefs_get_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("6. PATCH /users/me/preferences");
-# # ---------------------------------------------------------------
-# my $prefs_patch_res = $http->request(
-#     'PATCH',
-#     "$BASE_URL/users/me/preferences",
-#     {
-#         headers => {
-#             'Authorization' => "Bearer $access_token",
-#             'Content-Type'  => 'application/json',
-#         },
-#         content => $json->encode({ currencyCode => 'INR', units => 'metric' }),
-#     }
-# );
-# show($prefs_patch_res);
-# check("PATCH /users/me/preferences returns 200", $prefs_patch_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("7. GET /users/me/goals");
-# # ---------------------------------------------------------------
-# my $goals_get_res = $http->get(
-#     "$BASE_URL/users/me/goals",
-#     { headers => { 'Authorization' => "Bearer $access_token" } }
-# );
-# show($goals_get_res);
-# check("GET /users/me/goals returns 200", $goals_get_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("8. PATCH /users/me/goals");
-# # ---------------------------------------------------------------
-# my $goals_patch_res = $http->request(
-#     'PATCH',
-#     "$BASE_URL/users/me/goals",
-#     {
-#         headers => {
-#             'Authorization' => "Bearer $access_token",
-#             'Content-Type'  => 'application/json',
-#         },
-#         content => $json->encode({
-#             primaryGoal     => 'maintain',
-#             dailyCalories   => 2200,
-#             dailyProteinG   => 140,
-#             dailyWaterMl    => 3000,
-#             workoutsPerWeek => 4,
-#         }),
-#     }
-# );
-# show($goals_patch_res);
-# check("PATCH /users/me/goals returns 200", $goals_patch_res->{status} == 200);
-# if ($goals_patch_res->{status} == 200) {
-#     my $data = $json->decode($goals_patch_res->{content});
-#     check("dailyCalories was actually updated", ($data->{dailyCalories} // 0) == 2200);
-# }
-
-# # ---------------------------------------------------------------
-# section("9. POST /auth/refresh");
-# # ---------------------------------------------------------------
-# my $refresh_res = $http->post(
-#     "$BASE_URL/auth/refresh",
-#     {
-#         headers => { 'Content-Type' => 'application/json' },
-#         content => $json->encode({ refreshToken => $refresh_token }),
-#     }
-# );
-# show($refresh_res);
-# check("POST /auth/refresh returns 200 with a new accessToken", $refresh_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("10. POST /auth/password-reset");
-# # ---------------------------------------------------------------
-# my $reset_res = $http->post(
-#     "$BASE_URL/auth/password-reset",
-#     {
-#         headers => { 'Content-Type' => 'application/json' },
-#         content => $json->encode({ email => $email }),
-#     }
-# );
-# show($reset_res);
-# check("POST /auth/password-reset returns 200", $reset_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("11. POST /auth/logout");
-# # ---------------------------------------------------------------
-# my $logout_res = $http->post(
-#     "$BASE_URL/auth/logout",
-#     {
-#         headers => { 'Content-Type' => 'application/json' },
-#         content => $json->encode({ refreshToken => $refresh_token }),
-#     }
-# );
-# show($logout_res);
-# check("POST /auth/logout returns 200", $logout_res->{status} == 200);
-
-# # ---------------------------------------------------------------
-# section("12. Negative test: GET /users/me with NO token");
-# # ---------------------------------------------------------------
-# my $no_auth_res = $http->get("$BASE_URL/users/me");
-# show($no_auth_res);
-# check("correctly rejected with 401", $no_auth_res->{status} == 401);
-
-# # ---------------------------------------------------------------
-# section("13. Negative test: GET /users/me with garbage token");
-# # ---------------------------------------------------------------
-# my $bad_token_res = $http->get(
-#     "$BASE_URL/users/me",
-#     { headers => { 'Authorization' => 'Bearer garbage.invalid.token' } }
-# );
-# show($bad_token_res);
-# check("correctly rejected with 401", $bad_token_res->{status} == 401);
-
-# # ---------------------------------------------------------------
-# section("SUMMARY");
-# # ---------------------------------------------------------------
-# print "Passed: $pass_count\n";
-# print "Failed: $fail_count\n";
-# print $fail_count == 0 ? "\nALL TESTS PASSED\n" : "\nSOME TESTS FAILED - see above\n";
-
-
-
-
-
-
-
-
-
 #!/usr/bin/perl
 use strict;
 use warnings;
@@ -288,7 +32,7 @@ sub check {
 sub show {
     my ($res) = @_;
     print "Status: $res->{status}\n";
-    print "Body:   $res->{content}\n";
+    print "Body:   ", ($res->{content} // '(empty)'), "\n";
 }
 
 sub auth_headers {
@@ -335,6 +79,27 @@ check("user B registered and got accessToken", $token_b ? 1 : 0);
 # patch_value     - expected value of patch_field after PATCH
 # list_query      - optional query string to smoke-test filtering, e.g. "site=waist"
 # ---------------------------------------------------------------
+sub build_multipart {
+    my (%fields) = @_;
+    my $boundary = 'PerlFormBoundary' . int(rand(1e9));
+    my $body = '';
+    for my $name (keys %fields) {
+        my $f = $fields{$name};
+        $body .= "--$boundary\r\n";
+        if (exists $f->{filename}) {
+            $body .= "Content-Disposition: form-data; name=\"$name\"; filename=\"$f->{filename}\"\r\n";
+            $body .= "Content-Type: $f->{content_type}\r\n\r\n";
+            $body .= $f->{content} . "\r\n";
+        } else {
+            $body .= "Content-Disposition: form-data; name=\"$name\"\r\n\r\n";
+            $body .= $f->{value} . "\r\n";
+        }
+    }
+    $body .= "--$boundary--\r\n";
+    return ($body, $boundary);
+}
+
+
 sub test_resource {
     my (%args) = @_;
     my $name            = $args{name};
@@ -592,6 +357,325 @@ if ($bp_res->{status} == 201) {
     check("blood_pressure entry stored correct systolic/diastolic",
         $data && $data->{systolic} == 120 && $data->{diastolic} == 80);
 }
+
+# ---------------------------------------------------------------
+# 7. Medications
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Medications',
+    path            => 'medications',
+    create_payload  => { name => 'Vitamin D3', isPrescription => JSON::PP::false, dosage => '1000 IU', frequency => 'daily', quantityLeft => 30 },
+    invalid_payload => { dosage => '1000 IU' },  # missing name
+    patch_payload   => { quantityLeft => 25 },
+    patch_field     => 'quantityLeft',
+    patch_value     => 25,
+);
+
+# ---------------------------------------------------------------
+# 8. Appointments
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Appointments',
+    path            => 'appointments',
+    create_payload  => { title => 'Dentist checkup', scheduledAt => '2026-09-15T10:00:00.000Z', provider => 'Dr. Sharma', location => 'Clinic A' },
+    invalid_payload => { provider => 'Dr. Sharma' },  # missing title and scheduledAt
+    patch_payload   => { title => 'Dentist checkup (rescheduled)' },
+    patch_field     => 'title',
+    patch_value     => 'Dentist checkup (rescheduled)',
+);
+
+
+# ---------------------------------------------------------------
+section("9. Photos: POST /health/photos (upload)");
+# ---------------------------------------------------------------
+my $fake_png = "\x89PNG\r\n\x1a\n" . ("\x00" x 20);  # minimal fake binary content, good enough to test upload plumbing
+my ($photo_body, $photo_boundary) = build_multipart(
+    date  => { value => '2026-09-01' },
+    photo => { filename => 'test.png', content_type => 'image/png', content => $fake_png },
+);
+my $photo_post_res = $http->request('POST', "$BASE_URL/health/photos", {
+    headers => { 'Authorization' => "Bearer $token_a", 'Content-Type' => "multipart/form-data; boundary=$photo_boundary" },
+    content => $photo_body,
+});
+show($photo_post_res);
+check("Photos upload returns 201", $photo_post_res->{status} == 201);
+
+my $photo_id;
+if ($photo_post_res->{status} == 201) {
+    my $data = eval { $json->decode($photo_post_res->{content}) };
+    $photo_id = $data->{id} if $data;
+}
+
+section("Photos: GET /health/photos (list)");
+my $photo_list_res = $http->get("$BASE_URL/health/photos", { headers => auth_headers($token_a, 0) });
+show($photo_list_res);
+check("Photos list returns 200", $photo_list_res->{status} == 200);
+
+if ($photo_id) {
+    section("Photos: DELETE /health/photos/:id");
+    my $photo_delete_res = $http->request('DELETE', "$BASE_URL/health/photos/$photo_id", { headers => auth_headers($token_a, 0) });
+    show($photo_delete_res);
+    check("Photos delete returns 204", $photo_delete_res->{status} == 204);
+}
+
+# ---------------------------------------------------------------
+section("10. Records: POST /health/records (upload)");
+# ---------------------------------------------------------------
+my $fake_pdf = "%PDF-1.4\n" . ("\x00" x 20);
+my ($record_body, $record_boundary) = build_multipart(
+    title  => { value => 'Blood test report' },
+    record => { filename => 'test.pdf', content_type => 'application/pdf', content => $fake_pdf },
+);
+my $record_post_res = $http->request('POST', "$BASE_URL/health/records", {
+    headers => { 'Authorization' => "Bearer $token_a", 'Content-Type' => "multipart/form-data; boundary=$record_boundary" },
+    content => $record_body,
+});
+show($record_post_res);
+check("Records upload returns 201", $record_post_res->{status} == 201);
+
+my $record_id;
+if ($record_post_res->{status} == 201) {
+    my $data = eval { $json->decode($record_post_res->{content}) };
+    $record_id = $data->{id} if $data;
+}
+
+section("Records: GET /health/records (list)");
+my $record_list_res = $http->get("$BASE_URL/health/records", { headers => auth_headers($token_a, 0) });
+show($record_list_res);
+check("Records list returns 200", $record_list_res->{status} == 200);
+
+if ($record_id) {
+    section("Records: DELETE /health/records/:id");
+    my $record_delete_res = $http->request('DELETE', "$BASE_URL/health/records/$record_id", { headers => auth_headers($token_a, 0) });
+    show($record_delete_res);
+    check("Records delete returns 204", $record_delete_res->{status} == 204);
+}
+
+
+# ---------------------------------------------------------------
+section("11. GET /health/summary");
+# ---------------------------------------------------------------
+my $summary_res = $http->get("$BASE_URL/health/summary", { headers => auth_headers($token_a, 0) });
+show($summary_res);
+check("Summary returns 200", $summary_res->{status} == 200);
+if ($summary_res->{status} == 200) {
+    my $data = eval { $json->decode($summary_res->{content}) };
+    check("Summary response includes latestVitals object", $data && ref($data->{latestVitals}) eq 'HASH');
+}
+
+section("Summary: negative - no token");
+my $summary_no_auth_res = $http->get("$BASE_URL/health/summary");
+show($summary_no_auth_res);
+check("Summary with no token returns 401", $summary_no_auth_res->{status} == 401);
+
+
+
+# ---------------------------------------------------------------
+section("12. Plans: POST /fitness/plans (with nested exercises)");
+# ---------------------------------------------------------------
+my $plan_res = $http->post(
+    "$BASE_URL/fitness/plans",
+    {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({
+            name               => 'Push Day A',
+            targetMuscleGroups => ['chest', 'shoulders', 'triceps'],
+            exercises          => [
+                { name => 'Bench Press', order => 0, prescribedSets => 4, prescribedReps => '6-8' },
+                { name => 'Overhead Press', order => 1, prescribedSets => 3, prescribedReps => '8-12' },
+            ],
+        }),
+    }
+);
+show($plan_res);
+check("Plans create returns 201", $plan_res->{status} == 201);
+
+my $plan_id;
+if ($plan_res->{status} == 201) {
+    my $data = eval { $json->decode($plan_res->{content}) };
+    $plan_id = $data->{id} if $data;
+    check("Plans create response includes nested exercises array with 2 items",
+        $data && ref($data->{exercises}) eq 'ARRAY' && scalar(@{$data->{exercises}}) == 2);
+}
+
+section("Plans: POST /fitness/plans with invalid body (expect 400)");
+my $plan_bad_res = $http->post(
+    "$BASE_URL/fitness/plans",
+    {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ targetMuscleGroups => ['chest'] }),  # missing name
+    }
+);
+show($plan_bad_res);
+check("Plans POST missing name returns 400", $plan_bad_res->{status} == 400);
+
+section("Plans: GET /fitness/plans (list)");
+my $plan_list_res = $http->get("$BASE_URL/fitness/plans", { headers => auth_headers($token_a, 0) });
+show($plan_list_res);
+check("Plans list returns 200", $plan_list_res->{status} == 200);
+if ($plan_list_res->{status} == 200 && $plan_id) {
+    my $data = eval { $json->decode($plan_list_res->{content}) };
+    my $found = ref($data) eq 'ARRAY' && grep { ($_->{id} // '') eq $plan_id } @$data;
+    check("Plans list contains newly created plan", $found ? 1 : 0);
+}
+
+if ($plan_id) {
+    section("Plans: GET /fitness/plans/:id (single, with nested exercises)");
+    my $plan_get_res = $http->get("$BASE_URL/fitness/plans/$plan_id", { headers => auth_headers($token_a, 0) });
+    show($plan_get_res);
+    check("Plans GET/:id returns 200", $plan_get_res->{status} == 200);
+    if ($plan_get_res->{status} == 200) {
+        my $data = eval { $json->decode($plan_get_res->{content}) };
+        check("Plans GET/:id includes exercises ordered correctly",
+            $data && ref($data->{exercises}) eq 'ARRAY'
+            && $data->{exercises}[0]{name} eq 'Bench Press'
+            && $data->{exercises}[1]{name} eq 'Overhead Press');
+    }
+
+    section("Plans: PATCH /fitness/plans/:id");
+    my $plan_patch_res = $http->request('PATCH', "$BASE_URL/fitness/plans/$plan_id", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ name => 'Push Day A (updated)' }),
+    });
+    show($plan_patch_res);
+    check("Plans PATCH returns 200", $plan_patch_res->{status} == 200);
+    if ($plan_patch_res->{status} == 200) {
+        my $data = eval { $json->decode($plan_patch_res->{content}) };
+        check("Plans PATCH actually updated name", $data && $data->{name} eq 'Push Day A (updated)');
+    }
+
+    section("Plans: Negative - no auth token");
+    my $plan_no_auth_res = $http->get("$BASE_URL/fitness/plans");
+    show($plan_no_auth_res);
+    check("Plans list with no auth returns 401", $plan_no_auth_res->{status} == 401);
+
+    if ($token_b) {
+        section("Plans: Isolation - user B cannot access user A's plan");
+        my $plan_b_res = $http->get("$BASE_URL/fitness/plans/$plan_id", { headers => auth_headers($token_b, 0) });
+        show($plan_b_res);
+        check("Plans user B GET/:id on user A's plan returns 404", $plan_b_res->{status} == 404);
+
+        my $plan_b_delete_res = $http->request('DELETE', "$BASE_URL/fitness/plans/$plan_id", { headers => auth_headers($token_b, 0) });
+        show($plan_b_delete_res);
+        check("Plans user B DELETE on user A's plan returns 404", $plan_b_delete_res->{status} == 404);
+    }
+
+    section("Plans: DELETE /fitness/plans/:id (as owner)");
+    my $plan_delete_res = $http->request('DELETE', "$BASE_URL/fitness/plans/$plan_id", { headers => auth_headers($token_a, 0) });
+    show($plan_delete_res);
+    check("Plans DELETE returns 204", $plan_delete_res->{status} == 204);
+
+    section("Plans: GET /fitness/plans/:id after delete (should 404)");
+    my $plan_after_delete_res = $http->get("$BASE_URL/fitness/plans/$plan_id", { headers => auth_headers($token_a, 0) });
+    show($plan_after_delete_res);
+    check("Plans GET/:id after delete returns 404", $plan_after_delete_res->{status} == 404);
+}
+
+
+
+# ---------------------------------------------------------------
+section("13. Sessions: POST /fitness/sessions with invalid body (expect 400)");
+# ---------------------------------------------------------------
+my $session_bad_res = $http->post(
+    "$BASE_URL/fitness/sessions",
+    {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ muscles => ['chest'] }),  # missing date and title
+    }
+);
+show($session_bad_res);
+check("Sessions POST missing date/title returns 400", $session_bad_res->{status} == 400);
+
+section("Sessions: POST /fitness/sessions (create)");
+my $session_res = $http->post(
+    "$BASE_URL/fitness/sessions",
+    {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({
+            date            => '2026-09-01T00:00:00.000Z',
+            title           => 'Push Day A',
+            muscles         => ['chest', 'shoulders'],
+            status          => 'completed',
+            durationMinutes => 55,
+            perceivedEffort => 7,
+        }),
+    }
+);
+show($session_res);
+check("Sessions create returns 201", $session_res->{status} == 201);
+
+my $session_id;
+if ($session_res->{status} == 201) {
+    my $data = eval { $json->decode($session_res->{content}) };
+    $session_id = $data->{id} if $data;
+}
+
+section("Sessions: GET /fitness/sessions (list, date range filter)");
+my $session_list_res = $http->get(
+    "$BASE_URL/fitness/sessions?from=2026-01-01&to=2026-12-31",
+    { headers => auth_headers($token_a, 0) }
+);
+show($session_list_res);
+check("Sessions list returns 200", $session_list_res->{status} == 200);
+if ($session_list_res->{status} == 200 && $session_id) {
+    my $data = eval { $json->decode($session_list_res->{content}) };
+    my $found = ref($data) eq 'ARRAY' && grep { ($_->{id} // '') eq $session_id } @$data;
+    check("Sessions list contains newly created session", $found ? 1 : 0);
+}
+
+if ($session_id) {
+    section("Sessions: GET /fitness/sessions/:id (single, with nested exercises array)");
+    my $session_get_res = $http->get("$BASE_URL/fitness/sessions/$session_id", { headers => auth_headers($token_a, 0) });
+    show($session_get_res);
+    check("Sessions GET/:id returns 200", $session_get_res->{status} == 200);
+    if ($session_get_res->{status} == 200) {
+        my $data = eval { $json->decode($session_get_res->{content}) };
+        check("Sessions GET/:id includes an exercises array (empty is fine - no sub-resource endpoints yet)",
+            $data && ref($data->{exercises}) eq 'ARRAY');
+    }
+
+    section("Sessions: PATCH /fitness/sessions/:id (edit status/duration/RPE)");
+    my $session_patch_res = $http->request('PATCH', "$BASE_URL/fitness/sessions/$session_id", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ status => 'skipped', durationMinutes => 0, perceivedEffort => 0 }),
+    });
+    show($session_patch_res);
+    check("Sessions PATCH returns 200", $session_patch_res->{status} == 200);
+    if ($session_patch_res->{status} == 200) {
+        my $data = eval { $json->decode($session_patch_res->{content}) };
+        check("Sessions PATCH actually updated status", $data && $data->{status} eq 'skipped');
+    }
+
+    section("Sessions: Negative - no auth token");
+    my $session_no_auth_res = $http->get("$BASE_URL/fitness/sessions");
+    show($session_no_auth_res);
+    check("Sessions list with no auth returns 401", $session_no_auth_res->{status} == 401);
+
+    if ($token_b) {
+        section("Sessions: Isolation - user B cannot access user A's session");
+        my $session_b_res = $http->get("$BASE_URL/fitness/sessions/$session_id", { headers => auth_headers($token_b, 0) });
+        show($session_b_res);
+        check("Sessions user B GET/:id on user A's session returns 404", $session_b_res->{status} == 404);
+
+        my $session_b_delete_res = $http->request('DELETE', "$BASE_URL/fitness/sessions/$session_id", { headers => auth_headers($token_b, 0) });
+        show($session_b_delete_res);
+        check("Sessions user B DELETE on user A's session returns 404", $session_b_delete_res->{status} == 404);
+    }
+
+    section("Sessions: DELETE /fitness/sessions/:id (as owner)");
+    my $session_delete_res = $http->request('DELETE', "$BASE_URL/fitness/sessions/$session_id", { headers => auth_headers($token_a, 0) });
+    show($session_delete_res);
+    check("Sessions DELETE returns 204", $session_delete_res->{status} == 204);
+
+    section("Sessions: GET /fitness/sessions/:id after delete (should 404)");
+    my $session_after_delete_res = $http->get("$BASE_URL/fitness/sessions/$session_id", { headers => auth_headers($token_a, 0) });
+    show($session_after_delete_res);
+    check("Sessions GET/:id after delete returns 404", $session_after_delete_res->{status} == 404);
+}
+
+
+
+
 
 # ---------------------------------------------------------------
 section("SUMMARY");

@@ -44,6 +44,9 @@ model User {
   appointments  Appointment[]
   photos        Photo[]
   medicalRecords MedicalRecord[]
+
+  trainingPlans TrainingPlan[]
+  sessions      Session[]
 }
 
 model Preference {
@@ -212,4 +215,64 @@ model MedicalRecord {
   @@index([userId])
 }
 
+
+model TrainingPlan {
+  id                 String         @id @default(uuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [id])
+  name               String
+  targetMuscleGroups String[]
+  exercises          PlanExercise[]
+  createdAt          DateTime       @default(now())
+
+  @@index([userId])
+}
+
+model PlanExercise {
+  id             String       @id @default(uuid())
+  planId         String
+  plan           TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name           String
+  order          Int
+  prescribedSets Int
+  prescribedReps String       // e.g. "8-12" - kept as a string to allow ranges
+
+  @@index([planId])
+}
+
+model Session {
+  id               String            @id @default(uuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id])
+  date             DateTime
+  title            String
+  muscles          String[]
+  status           String            @default("completed") // "completed" | "skipped"
+  durationMinutes  Int?
+  perceivedEffort  Int?              // RPE
+  exercises        SessionExercise[]
+  createdAt        DateTime          @default(now())
+
+  @@index([userId, date])
+}
+
+model SessionExercise {
+  id        String      @id @default(uuid())
+  sessionId String
+  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int
+  sets      SessionSet[]
+}
+
+model SessionSet {
+  id                String          @id @default(uuid())
+  sessionExerciseId String
+  sessionExercise   SessionExercise @relation(fields: [sessionExerciseId], references: [id], onDelete: Cascade)
+  kind              String          @default("working") // "warmup" | "working"
+  weightKg          Float?
+  reps              Int?
+  rpe               Float?
+  completed         Boolean         @default(false)
+}
 
