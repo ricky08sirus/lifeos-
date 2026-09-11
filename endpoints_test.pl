@@ -673,6 +673,119 @@ if ($session_id) {
     check("Sessions GET/:id after delete returns 404", $session_after_delete_res->{status} == 404);
 }
 
+# ---------------------------------------------------------------
+section("14. Exercise History: setup - create session + exercise + set");
+# ---------------------------------------------------------------
+my $hist_session_res = $http->post(
+    "$BASE_URL/fitness/sessions",
+    {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({
+            date  => '2026-09-05T00:00:00.000Z',
+            title => 'History Test Session',
+        }),
+    }
+);
+show($hist_session_res);
+check("History setup - session create returns 201", $hist_session_res->{status} == 201);
+
+my $hist_session_id;
+if ($hist_session_res->{status} == 201) {
+    my $data = eval { $json->decode($hist_session_res->{content}) };
+    $hist_session_id = $data->{id} if $data;
+}
+
+my $hist_exercise_id;
+if ($hist_session_id) {
+    my $hist_ex_res = $http->post(
+        "$BASE_URL/fitness/sessions/$hist_session_id/exercises",
+        {
+            headers => auth_headers($token_a, 1),
+            content => $json->encode({ name => 'HistoryTestExercise', order => 0 }),
+        }
+    );
+    show($hist_ex_res);
+    check("History setup - exercise create returns 201", $hist_ex_res->{status} == 201);
+    if ($hist_ex_res->{status} == 201) {
+        my $data = eval { $json->decode($hist_ex_res->{content}) };
+        $hist_exercise_id = $data->{id} if $data;
+    }
+}
+
+if ($hist_exercise_id) {
+    my $hist_set_res = $http->post(
+        "$BASE_URL/fitness/sessions/$hist_session_id/exercises/$hist_exercise_id/sets",
+        {
+            headers => auth_headers($token_a, 1),
+            content => $json->encode({ kind => 'working', weightKg => 100, reps => 5, rpe => 8, completed => JSON::PP::true }),
+        }
+    );
+    show($hist_set_res);
+    check("History setup - set create returns 201", $hist_set_res->{status} == 201);
+}
+
+section("Exercise History: GET /fitness/exercises/HistoryTestExercise/history");
+my $hist_res = $http->get(
+    "$BASE_URL/fitness/exercises/HistoryTestExercise/history",
+    { headers => auth_headers($token_a, 0) }
+);
+show($hist_res);
+check("Exercise history returns 200", $hist_res->{status} == 200);
+if ($hist_res->{status} == 200) {
+    my $data = eval { $json->decode($hist_res->{content}) };
+    check("Exercise history response is a bare JSON array", ref($data) eq 'ARRAY');
+    my ($entry) = grep { ($_->{weightKg} // 0) == 100 && ($_->{reps} // 0) == 5 } @$data;
+    check("Exercise history contains the set just created", $entry ? 1 : 0);
+}
+
+section("Exercise History: negative - no auth token");
+my $hist_no_auth_res = $http->get("$BASE_URL/fitness/exercises/HistoryTestExercise/history");
+show($hist_no_auth_res);
+check("Exercise history with no auth returns 401", $hist_no_auth_res->{status} == 401);
+
+if ($token_b) {
+    section("Exercise History: Isolation - user B sees no entries for user A's exercise name");
+    my $hist_b_res = $http->get(
+        "$BASE_URL/fitness/exercises/HistoryTestExercise/history",
+        { headers => auth_headers($token_b, 0) }
+    );
+    show($hist_b_res);
+    if ($hist_b_res->{status} == 200) {
+        my $data = eval { $json->decode($hist_b_res->{content}) };
+        check("Exercise history user B array does not contain user A's entry",
+            ref($data) eq 'ARRAY' && scalar(@$data) == 0);
+    }
+}
+
+# cleanup
+if ($hist_session_id) {
+    $http->request('DELETE', "$BASE_URL/fitness/sessions/$hist_session_id", { headers => auth_headers($token_a, 0) });
+}
+
+
+# ---------------------------------------------------------------
+section("15. Fitness Summary: GET /fitness/summary");
+# ---------------------------------------------------------------
+my $fitness_summary_res = $http->get("$BASE_URL/fitness/summary", { headers => auth_headers($token_a, 0) });
+show($fitness_summary_res);
+check("Fitness summary returns 200", $fitness_summary_res->{status} == 200);
+if ($fitness_summary_res->{status} == 200) {
+    my $data = eval { $json->decode($fitness_summary_res->{content}) };
+    check("Fitness summary includes last30Days object",
+        $data && ref($data->{last30Days}) eq 'HASH');
+    check("Fitness summary last30Days has sessionsCompleted/sessionsPlanned/adherencePercent/totalVolumeKg",
+        $data && exists $data->{last30Days}{sessionsCompleted}
+              && exists $data->{last30Days}{sessionsPlanned}
+              && exists $data->{last30Days}{adherencePercent}
+              && exists $data->{last30Days}{totalVolumeKg});
+    check("Fitness summary includes estimatedOneRepMaxByExercise object",
+        $data && ref($data->{estimatedOneRepMaxByExercise}) eq 'HASH');
+}
+
+section("Fitness Summary: negative - no auth token");
+my $fitness_summary_no_auth_res = $http->get("$BASE_URL/fitness/summary");
+show($fitness_summary_no_auth_res);
+check("Fitness summary with no auth returns 401", $fitness_summary_no_auth_res->{status} == 401);
 
 
 

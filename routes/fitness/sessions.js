@@ -1,6 +1,7 @@
 const express = require('express');
 const requireAuth = require('../../middleware/auth');
 const prisma = require('../../lib/prisma');
+const sessionExercisesRouter = require('./sessionExercises');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -86,5 +87,8 @@ router.delete('/:id', async (req, res) => {
   await prisma.session.delete({ where: { id: req.params.id } }); // cascades to exercises + sets
   res.status(204).send();
 });
+
+router.use('/:id/exercises', sessionExercisesRouter);
+
 
 module.exports = router;
