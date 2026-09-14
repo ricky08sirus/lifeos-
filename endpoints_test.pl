@@ -1000,7 +1000,268 @@ show($habits_summary_no_auth_res);
 check("Habits summary with no auth returns 401", $habits_summary_no_auth_res->{status} == 401);
 
 
+# ---------------------------------------------------------------
+# 23. Finance: Income (singleton resource - GET/PATCH only, no id, no list)
+# ---------------------------------------------------------------
+section("23. Finance Income: PATCH /finance/income with invalid body (expect 400)");
+my $income_bad_res = $http->request('PATCH', "$BASE_URL/finance/income", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ label => 'Salary' }),  # missing monthlyNetPaise
+});
+show($income_bad_res);
+check("Finance Income PATCH missing monthlyNetPaise returns 400", $income_bad_res->{status} == 400);
 
+section("Finance Income: PATCH /finance/income (create via upsert)");
+my $income_res = $http->request('PATCH', "$BASE_URL/finance/income", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ monthlyNetPaise => 8000000, label => 'Salary' }),
+});
+show($income_res);
+check("Finance Income PATCH returns 200", $income_res->{status} == 200);
+if ($income_res->{status} == 200) {
+    my $data = eval { $json->decode($income_res->{content}) };
+    check("Finance Income monthlyNetPaise stored correctly", $data && $data->{monthlyNetPaise} == 8000000);
+}
+
+section("Finance Income: GET /finance/income");
+my $income_get_res = $http->get("$BASE_URL/finance/income", { headers => auth_headers($token_a, 0) });
+show($income_get_res);
+check("Finance Income GET returns 200", $income_get_res->{status} == 200);
+
+section("Finance Income: PATCH again (upsert overwrite)");
+my $income_update_res = $http->request('PATCH', "$BASE_URL/finance/income", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ monthlyNetPaise => 8500000 }),
+});
+show($income_update_res);
+check("Finance Income PATCH overwrite returns 200", $income_update_res->{status} == 200);
+if ($income_update_res->{status} == 200) {
+    my $data = eval { $json->decode($income_update_res->{content}) };
+    check("Finance Income overwrite actually updated monthlyNetPaise", $data && $data->{monthlyNetPaise} == 8500000);
+}
+
+section("Finance Income: negative - no auth token");
+my $income_no_auth_res = $http->get("$BASE_URL/finance/income");
+show($income_no_auth_res);
+check("Finance Income GET with no auth returns 401", $income_no_auth_res->{status} == 401);
+
+# ---------------------------------------------------------------
+# 24. Finance: Accounts (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Accounts',
+    path            => 'finance/accounts',
+    create_payload  => { name => 'HDFC Savings', kind => 'savings', institution => 'HDFC Bank', balancePaise => 5000000, isPrimary => JSON::PP::true },
+    invalid_payload => { institution => 'HDFC Bank' },  # missing name and kind
+    patch_payload   => { balancePaise => 4500000 },
+    patch_field     => 'balancePaise',
+    patch_value     => 4500000,
+);
+
+# ---------------------------------------------------------------
+# 25. Finance: Categories (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Categories',
+    path            => 'finance/categories',
+    create_payload  => { name => 'Groceries', group => 'Food', isNeed => JSON::PP::true, budgetPaise => 1500000 },
+    invalid_payload => { isNeed => JSON::PP::true },  # missing name and group
+    patch_payload   => { budgetPaise => 1800000 },
+    patch_field     => 'budgetPaise',
+    patch_value     => 1800000,
+);
+
+# ---------------------------------------------------------------
+# 26. Finance: Transactions (needs an account + category to reference - custom setup)
+# ---------------------------------------------------------------
+section("26. Finance Transactions: setup - create account + category to reference");
+my $txn_account_res = $http->post("$BASE_URL/finance/accounts", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'ICICI Checking', kind => 'savings' }),
+});
+show($txn_account_res);
+my $txn_account_id;
+if ($txn_account_res->{status} == 201) {
+    my $data = eval { $json->decode($txn_account_res->{content}) };
+    $txn_account_id = $data->{id} if $data;
+}
+check("Finance Transactions setup - account created", $txn_account_id ? 1 : 0);
+
+my $txn_category_res = $http->post("$BASE_URL/finance/categories", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'Dining Out', group => 'Food' }),
+});
+show($txn_category_res);
+my $txn_category_id;
+if ($txn_category_res->{status} == 201) {
+    my $data = eval { $json->decode($txn_category_res->{content}) };
+    $txn_category_id = $data->{id} if $data;
+}
+check("Finance Transactions setup - category created", $txn_category_id ? 1 : 0);
+
+if ($txn_account_id) {
+    section("Finance Transactions: POST /finance/transactions with invalid body (expect 400)");
+    my $txn_bad_res = $http->post("$BASE_URL/finance/transactions", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ merchant => 'Zomato' }),  # missing amountPaise, accountId, date
+    });
+    show($txn_bad_res);
+    check("Finance Transactions POST missing required fields returns 400", $txn_bad_res->{status} == 400);
+
+    section("Finance Transactions: POST /finance/transactions with someone else's accountId (expect 400)");
+    my $fake_account_res = $http->post("$BASE_URL/finance/transactions", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({
+            merchant => 'Zomato', amountPaise => 45000, accountId => 'nonexistent-account-id',
+            date => '2026-09-01T00:00:00.000Z',
+        }),
+    });
+    show($fake_account_res);
+    check("Finance Transactions POST with invalid accountId returns 400", $fake_account_res->{status} == 400);
+
+    section("Finance Transactions: POST /finance/transactions (valid)");
+    my $txn_res = $http->post("$BASE_URL/finance/transactions", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({
+            merchant   => 'Zomato',
+            amountPaise => 45000,
+            accountId   => $txn_account_id,
+            categoryId  => $txn_category_id,
+            date        => '2026-09-01T00:00:00.000Z',
+        }),
+    });
+    show($txn_res);
+    check("Finance Transactions create returns 201", $txn_res->{status} == 201);
+
+    my $txn_id;
+    if ($txn_res->{status} == 201) {
+        my $data = eval { $json->decode($txn_res->{content}) };
+        $txn_id = $data->{id} if $data;
+    }
+
+    section("Finance Transactions: GET /finance/transactions (filter by accountId)");
+    my $txn_list_res = $http->get("$BASE_URL/finance/transactions?accountId=$txn_account_id", { headers => auth_headers($token_a, 0) });
+    show($txn_list_res);
+    check("Finance Transactions filtered list returns 200", $txn_list_res->{status} == 200);
+    if ($txn_list_res->{status} == 200 && $txn_id) {
+        my $data = eval { $json->decode($txn_list_res->{content}) };
+        my $found = ref($data) eq 'ARRAY' && grep { ($_->{id} // '') eq $txn_id } @$data;
+        check("Finance Transactions filtered list contains the new transaction", $found ? 1 : 0);
+    }
+
+    if ($txn_id) {
+        section("Finance Transactions: PATCH /finance/transactions/:id (re-categorize)");
+        my $txn_patch_res = $http->request('PATCH', "$BASE_URL/finance/transactions/$txn_id", {
+            headers => auth_headers($token_a, 1),
+            content => $json->encode({ merchant => 'Swiggy' }),
+        });
+        show($txn_patch_res);
+        check("Finance Transactions PATCH returns 200", $txn_patch_res->{status} == 200);
+        if ($txn_patch_res->{status} == 200) {
+            my $data = eval { $json->decode($txn_patch_res->{content}) };
+            check("Finance Transactions PATCH actually updated merchant", $data && $data->{merchant} eq 'Swiggy');
+        }
+
+        section("Finance Transactions: negative - no auth token");
+        my $txn_no_auth_res = $http->get("$BASE_URL/finance/transactions");
+        show($txn_no_auth_res);
+        check("Finance Transactions GET with no auth returns 401", $txn_no_auth_res->{status} == 401);
+
+        if ($token_b) {
+            section("Finance Transactions: Isolation - user B cannot access user A's transaction");
+            my $txn_b_patch_res = $http->request('PATCH', "$BASE_URL/finance/transactions/$txn_id", {
+                headers => auth_headers($token_b, 1),
+                content => $json->encode({ merchant => 'Hacked' }),
+            });
+            show($txn_b_patch_res);
+            check("Finance Transactions user B PATCH on user A's transaction returns 404", $txn_b_patch_res->{status} == 404);
+        }
+
+        section("Finance Transactions: DELETE /finance/transactions/:id");
+        my $txn_delete_res = $http->request('DELETE', "$BASE_URL/finance/transactions/$txn_id", { headers => auth_headers($token_a, 0) });
+        show($txn_delete_res);
+        check("Finance Transactions DELETE returns 204", $txn_delete_res->{status} == 204);
+    }
+}
+
+# cleanup
+if ($txn_account_id) {
+    $http->request('DELETE', "$BASE_URL/finance/accounts/$txn_account_id", { headers => auth_headers($token_a, 0) });
+}
+if ($txn_category_id) {
+    $http->request('DELETE', "$BASE_URL/finance/categories/$txn_category_id", { headers => auth_headers($token_a, 0) });
+}
+
+# ---------------------------------------------------------------
+# 27. Finance: Debts (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Debts',
+    path            => 'finance/debts',
+    create_payload  => {
+        name => 'iPhone EMI', kind => 'gadget_emi', lender => 'Bajaj Finance',
+        principalPaise => 8000000, annualRatePct => 14.5, termMonths => 12,
+        startedOn => '2026-01-01T00:00:00.000Z', emiPaise => 700000,
+        purchasePricePaise => 9000000, downPaymentPaise => 1000000,
+    },
+    invalid_payload => { name => 'iPhone EMI' },  # missing most required fields
+    patch_payload   => { paidMonths => 3 },
+    patch_field     => 'paidMonths',
+    patch_value     => 3,
+);
+
+# ---------------------------------------------------------------
+# 28. Finance: Bills (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Bills',
+    path            => 'finance/bills',
+    create_payload  => { name => 'Electricity', amountPaise => 250000, dueDay => 5, recurrence => 'monthly', isVariable => JSON::PP::true },
+    invalid_payload => { name => 'Electricity' },  # missing amountPaise, dueDay, recurrence
+    patch_payload   => { amountPaise => 280000 },
+    patch_field     => 'amountPaise',
+    patch_value     => 280000,
+);
+
+# ---------------------------------------------------------------
+# 29. Finance: Subscriptions (GET/POST only - custom block, no PATCH/DELETE per spec)
+# ---------------------------------------------------------------
+section("29. Finance Subscriptions: POST /finance/subscriptions with invalid body (expect 400)");
+my $sub_bad_res = $http->post("$BASE_URL/finance/subscriptions", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'Netflix' }),  # missing amountPaise, recurrence, dueDay
+});
+show($sub_bad_res);
+check("Finance Subscriptions POST missing required fields returns 400", $sub_bad_res->{status} == 400);
+
+section("Finance Subscriptions: POST /finance/subscriptions (create)");
+my $sub_res = $http->post("$BASE_URL/finance/subscriptions", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'Netflix', amountPaise => 64900, recurrence => 'monthly', dueDay => 10, lastUsedDaysAgo => 45 }),
+});
+show($sub_res);
+check("Finance Subscriptions create returns 201", $sub_res->{status} == 201);
+
+my $sub_id;
+if ($sub_res->{status} == 201) {
+    my $data = eval { $json->decode($sub_res->{content}) };
+    $sub_id = $data->{id} if $data;
+}
+
+section("Finance Subscriptions: GET /finance/subscriptions (list)");
+my $sub_list_res = $http->get("$BASE_URL/finance/subscriptions", { headers => auth_headers($token_a, 0) });
+show($sub_list_res);
+check("Finance Subscriptions list returns 200", $sub_list_res->{status} == 200);
+if ($sub_list_res->{status} == 200 && $sub_id) {
+    my $data = eval { $json->decode($sub_list_res->{content}) };
+    my $found = ref($data) eq 'ARRAY' && grep { ($_->{id} // '') eq $sub_id } @$data;
+    check("Finance Subscriptions list contains newly created subscription", $found ? 1 : 0);
+}
+
+section("Finance Subscriptions: negative - no auth token");
+my $sub_no_auth_res = $http->get("$BASE_URL/finance/subscriptions");
+show($sub_no_auth_res);
+check("Finance Subscriptions GET with no auth returns 401", $sub_no_auth_res->{status} == 401);
 
 # ---------------------------------------------------------------
 section("SUMMARY");

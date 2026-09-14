@@ -9,6 +9,8 @@ const healthRouter = require('./routes/health');
 const fitnessRouter = require('./routes/fitness');
 const nutritionRouter = require('./routes/nutrition');
 const habitsRouter = require('./routes/habits');
+const financeRouter = require('./routes/finance');
+
 
 const app = express();
 
@@ -22,6 +24,8 @@ app.use('/health', healthRouter);
 app.use('/fitness', fitnessRouter);
 app.use('/nutrition', nutritionRouter);
 app.use('/habits', habitsRouter);
+app.use('/finance', financeRouter);
+
 
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', {

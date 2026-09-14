@@ -53,6 +53,14 @@ model User {
   foodItems   FoodItem[]
 
   habits Habit[]
+
+  income        Income?
+  accounts      Account[]
+  categories    Category[]
+  transactions  Transaction[]
+  debts         Debt[]
+  bills         Bill[]
+  subscriptions Subscription[]
 }
 
 model Preference {
@@ -355,3 +363,112 @@ model HabitLog {
 }
 
 
+model Income {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  monthlyNetPaise Int
+  label           String?
+  updatedAt       DateTime @updatedAt
+}
+
+model Account {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  name          String
+  kind          String        // "savings" | "cash" | "credit_card" | ...
+  institution   String?
+  maskedNumber  String?
+  balancePaise  Int           @default(0)
+  isPrimary     Boolean       @default(false)
+  limitPaise    Int?          // credit cards only
+  statementDay  Int?          // credit cards only
+  dueDay        Int?          // credit cards only
+  transactions  Transaction[]
+  createdAt     DateTime      @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  name          String
+  group         String        // "Housing" | "Food" | "Transport" | ...
+  isNeed        Boolean       @default(true)
+  budgetPaise   Int?          // monthly budget for this category
+  transactions  Transaction[]
+  createdAt     DateTime      @default(now())
+
+  @@index([userId])
+}
+
+model Transaction {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  merchant    String
+  amountPaise Int
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id])
+  date        DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, date])
+  @@index([userId, categoryId])
+  @@index([userId, accountId])
+}
+
+model Debt {
+  id                  String    @id @default(uuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id])
+  name                String
+  kind                String    // "gadget_emi" | "vehicle_loan" | "personal_loan" | "home_loan"
+  lender              String?
+  principalPaise      Int
+  annualRatePct       Float
+  termMonths          Int
+  startedOn           DateTime
+  emiPaise            Int
+  paidMonths          Int       @default(0)
+  purchasePricePaise  Int?      // gadget EMIs only
+  downPaymentPaise    Int?      // gadget EMIs only
+  createdAt           DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Bill {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  name         String
+  amountPaise  Int
+  dueDay       Int
+  recurrence   String   // "monthly" | "annual"
+  autopay      Boolean  @default(false)
+  category     String?
+  isVariable   Boolean  @default(false) // e.g. electricity
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Subscription {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  name             String
+  amountPaise      Int
+  recurrence       String   // "monthly" | "annual"
+  dueDay           Int
+  lastUsedDaysAgo  Int?
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+}
