@@ -47,6 +47,12 @@ model User {
 
   trainingPlans TrainingPlan[]
   sessions      Session[]
+
+  meals       Meal[]
+  waterIntakes WaterIntake[]
+  foodItems   FoodItem[]
+
+  habits Habit[]
 }
 
 model Preference {
@@ -275,4 +281,77 @@ model SessionSet {
   rpe               Float?
   completed         Boolean         @default(false)
 }
+
+model Meal {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  slot      String   // breakfast | lunch | dinner | snack | pre_workout | post_workout
+  label     String
+  calories  Int?
+  protein   Float?
+  carbs     Float?
+  fat       Float?
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([userId, slot])
+}
+
+model WaterIntake {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  amountMl  Int
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+model FoodItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  dietTags  String[] // e.g. ["vegetarian", "vegan", "gluten_free"]
+  calories  Int?
+  protein   Float?
+  carbs     Float?
+  fat       Float?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+
+model Habit {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  name         String
+  cadence      String     // "daily" | "custom_days"
+  customDays   Int[]      // 0=Sunday...6=Saturday, used when cadence = custom_days
+  metricType   String     // "boolean" | "count" | "duration_minutes"
+  target       Int?       // used for count/duration types
+  archivedAt   DateTime?
+  logs         HabitLog[]
+  createdAt    DateTime   @default(now())
+
+  @@index([userId])
+}
+
+model HabitLog {
+  id        String   @id @default(uuid())
+  habitId   String
+  habit     Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    String   // "done" | "skipped"
+  value     Int?     // used for count/duration metric types
+
+  @@unique([habitId, date])
+  @@index([habitId, date])
+}
+
 

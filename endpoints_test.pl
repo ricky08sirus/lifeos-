@@ -103,13 +103,14 @@ sub build_multipart {
 sub test_resource {
     my (%args) = @_;
     my $name            = $args{name};
-    my $path             = "health/$args{path}";
+    my $path             = $args{path};
     my $create_payload   = $args{create_payload};
     my $invalid_payload  = $args{invalid_payload};
     my $patch_payload    = $args{patch_payload};
     my $patch_field      = $args{patch_field};
     my $patch_value      = $args{patch_value};
     my $list_query       = $args{list_query};
+    my $soft_delete       = $args{soft_delete};
 
     section("$name: POST /$path with invalid body (expect 400)");
     if ($invalid_payload) {
@@ -169,21 +170,23 @@ sub test_resource {
         check("$name filtered list returns 200", $filtered_res->{status} == 200);
     }
 
-    section("$name: PATCH /$path/$id (update)");
-    my $patch_res = $http->request(
-        'PATCH',
-        "$BASE_URL/$path/$id",
-        {
-            headers => auth_headers($token_a, 1),
-            content => $json->encode($patch_payload),
+    if (defined $patch_payload) {
+        section("$name: PATCH /$path/$id (update)");
+        my $patch_res = $http->request(
+            'PATCH',
+            "$BASE_URL/$path/$id",
+            {
+                headers => auth_headers($token_a, 1),
+                content => $json->encode($patch_payload),
+            }
+        );
+        show($patch_res);
+        check("$name PATCH returns 200", $patch_res->{status} == 200);
+        if ($patch_res->{status} == 200 && defined $patch_field) {
+            my $data = eval { $json->decode($patch_res->{content}) };
+            check("$name PATCH actually updated $patch_field",
+                $data && (($data->{$patch_field} // '') eq $patch_value));
         }
-    );
-    show($patch_res);
-    check("$name PATCH returns 200", $patch_res->{status} == 200);
-    if ($patch_res->{status} == 200 && defined $patch_field) {
-        my $data = eval { $json->decode($patch_res->{content}) };
-        check("$name PATCH actually updated $patch_field",
-            $data && (($data->{$patch_field} // '') eq $patch_value));
     }
 
     section("$name: Negative - no auth token at all");
@@ -204,16 +207,18 @@ sub test_resource {
             check("$name user B's list does not contain user A's entry", !$leaked);
         }
 
-        my $b_patch_res = $http->request(
-            'PATCH',
-            "$BASE_URL/$path/$id",
-            {
-                headers => auth_headers($token_b, 1),
-                content => $json->encode($patch_payload),
-            }
-        );
-        show($b_patch_res);
-        check("$name user B PATCH on user A's entry returns 404", $b_patch_res->{status} == 404);
+        if (defined $patch_payload) {
+            my $b_patch_res = $http->request(
+                'PATCH',
+                "$BASE_URL/$path/$id",
+                {
+                    headers => auth_headers($token_b, 1),
+                    content => $json->encode($patch_payload),
+                }
+            );
+            show($b_patch_res);
+            check("$name user B PATCH on user A's entry returns 404", $b_patch_res->{status} == 404);
+        }
 
         my $b_delete_res = $http->request(
             'DELETE',
@@ -233,17 +238,29 @@ sub test_resource {
     show($delete_res);
     check("$name DELETE returns 204", $delete_res->{status} == 204);
 
-    section("$name: PATCH /$path/$id after delete (should 404)");
-    my $after_delete_res = $http->request(
-        'PATCH',
-        "$BASE_URL/$path/$id",
-        {
-            headers => auth_headers($token_a, 1),
-            content => $json->encode($patch_payload),
+    if (defined $patch_payload) {
+        section("$name: PATCH /$path/$id after delete");
+        my $after_delete_res = $http->request(
+            'PATCH',
+            "$BASE_URL/$path/$id",
+            {
+                headers => auth_headers($token_a, 1),
+                content => $json->encode($patch_payload),
+            }
+        );
+        show($after_delete_res);
+        if ($soft_delete) {
+            # Soft-delete resources keep the row (archivedAt set) - PATCH after
+            # delete legitimately still succeeds with 200, not 404.
+            check("$name PATCH after delete returns 200 (soft-delete)", $after_delete_res->{status} == 200);
+            if ($after_delete_res->{status} == 200) {
+                my $data = eval { $json->decode($after_delete_res->{content}) };
+                check("$name archivedAt is actually set after delete", $data && $data->{archivedAt});
+            }
+        } else {
+            check("$name PATCH after delete returns 404", $after_delete_res->{status} == 404);
         }
-    );
-    show($after_delete_res);
-    check("$name PATCH after delete returns 404", $after_delete_res->{status} == 404);
+    }
 }
 
 # ---------------------------------------------------------------
@@ -251,7 +268,7 @@ sub test_resource {
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Weights',
-    path            => 'weights',
+    path            => 'health/weights',
     create_payload  => { date => '2026-09-01T00:00:00.000Z', kg => 72.5 },
     invalid_payload => { date => '2026-09-01T00:00:00.000Z' },  # missing kg
     patch_payload   => { kg => 71.8 },
@@ -265,7 +282,7 @@ test_resource(
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Measurements',
-    path            => 'measurements',
+    path            => 'health/measurements',
     create_payload  => { date => '2026-09-01T00:00:00.000Z', site => 'waist', valueCm => 85.0 },
     invalid_payload => { date => '2026-09-01T00:00:00.000Z', valueCm => 85.0 },  # missing site
     patch_payload   => { valueCm => 84.2 },
@@ -279,7 +296,7 @@ test_resource(
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Sleep',
-    path            => 'sleep',
+    path            => 'health/sleep',
     create_payload  => {
         date            => '2026-09-01T00:00:00.000Z',
         durationMinutes => 420,
@@ -298,7 +315,7 @@ test_resource(
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Wellbeing',
-    path            => 'wellbeing',
+    path            => 'health/wellbeing',
     create_payload  => {
         date     => '2026-09-01T00:00:00.000Z',
         mood     => 4,
@@ -319,7 +336,7 @@ test_resource(
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Vitals (heart rate)',
-    path            => 'vitals',
+    path            => 'health/vitals',
     create_payload  => { kind => 'resting_heart_rate', value => 58 },
     invalid_payload => { kind => 'resting_heart_rate' },  # missing value
     patch_payload   => { value => 60 },
@@ -363,7 +380,7 @@ if ($bp_res->{status} == 201) {
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Medications',
-    path            => 'medications',
+    path            => 'health/medications',
     create_payload  => { name => 'Vitamin D3', isPrescription => JSON::PP::false, dosage => '1000 IU', frequency => 'daily', quantityLeft => 30 },
     invalid_payload => { dosage => '1000 IU' },  # missing name
     patch_payload   => { quantityLeft => 25 },
@@ -376,7 +393,7 @@ test_resource(
 # ---------------------------------------------------------------
 test_resource(
     name            => 'Appointments',
-    path            => 'appointments',
+    path            => 'health/appointments',
     create_payload  => { title => 'Dentist checkup', scheduledAt => '2026-09-15T10:00:00.000Z', provider => 'Dr. Sharma', location => 'Clinic A' },
     invalid_payload => { provider => 'Dr. Sharma' },  # missing title and scheduledAt
     patch_payload   => { title => 'Dentist checkup (rescheduled)' },
@@ -786,6 +803,201 @@ section("Fitness Summary: negative - no auth token");
 my $fitness_summary_no_auth_res = $http->get("$BASE_URL/fitness/summary");
 show($fitness_summary_no_auth_res);
 check("Fitness summary with no auth returns 401", $fitness_summary_no_auth_res->{status} == 401);
+
+
+# ---------------------------------------------------------------
+# 16. Nutrition: Meals (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Meals',
+    path            => 'nutrition/meals',
+    create_payload  => { date => '2026-09-01T08:00:00.000Z', slot => 'breakfast', label => 'Oats + banana', calories => 350, protein => 12 },
+    invalid_payload => { date => '2026-09-01T08:00:00.000Z', slot => 'breakfast' },  # missing label
+    patch_payload   => { calories => 400 },
+    patch_field     => 'calories',
+    patch_value     => 400,
+    list_query      => 'slot=breakfast',
+);
+
+# ---------------------------------------------------------------
+# 17. Nutrition: Water (no PATCH endpoint)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Water',
+    path            => 'nutrition/water',
+    create_payload  => { date => '2026-09-01T08:00:00.000Z', amountMl => 500 },
+    invalid_payload => { date => '2026-09-01T08:00:00.000Z' },  # missing amountMl
+    patch_payload   => undef,
+);
+
+# ---------------------------------------------------------------
+# 18. Nutrition: Foods (GET/POST only - custom block, no PATCH/DELETE)
+# ---------------------------------------------------------------
+section("Foods: POST /nutrition/foods with invalid body (expect 400)");
+my $food_bad_res = $http->post("$BASE_URL/nutrition/foods", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ calories => 200 }),  # missing name
+});
+show($food_bad_res);
+check("Foods POST missing name returns 400", $food_bad_res->{status} == 400);
+
+section("Foods: POST /nutrition/foods (create)");
+my $food_res = $http->post("$BASE_URL/nutrition/foods", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'Paneer Tikka', dietTags => ['lacto_vegetarian'], calories => 250, protein => 18 }),
+});
+show($food_res);
+check("Foods create returns 201", $food_res->{status} == 201);
+
+my $food_id;
+if ($food_res->{status} == 201) {
+    my $data = eval { $json->decode($food_res->{content}) };
+    $food_id = $data->{id} if $data;
+}
+
+section("Foods: GET /nutrition/foods?q=Paneer (search)");
+my $food_search_res = $http->get("$BASE_URL/nutrition/foods?q=Paneer", { headers => auth_headers($token_a, 0) });
+show($food_search_res);
+check("Foods search returns 200", $food_search_res->{status} == 200);
+if ($food_search_res->{status} == 200 && $food_id) {
+    my $data = eval { $json->decode($food_search_res->{content}) };
+    my $found = ref($data) eq 'ARRAY' && grep { ($_->{id} // '') eq $food_id } @$data;
+    check("Foods search finds newly created food", $found ? 1 : 0);
+}
+
+section("Foods: negative - no auth token");
+my $food_no_auth_res = $http->get("$BASE_URL/nutrition/foods");
+show($food_no_auth_res);
+check("Foods GET with no auth returns 401", $food_no_auth_res->{status} == 401);
+
+# ---------------------------------------------------------------
+# 19. Nutrition: Summary (read-only)
+# ---------------------------------------------------------------
+section("19. GET /nutrition/summary");
+my $nutrition_summary_res = $http->get("$BASE_URL/nutrition/summary?date=2026-09-01", { headers => auth_headers($token_a, 0) });
+show($nutrition_summary_res);
+check("Nutrition summary returns 200", $nutrition_summary_res->{status} == 200);
+if ($nutrition_summary_res->{status} == 200) {
+    my $data = eval { $json->decode($nutrition_summary_res->{content}) };
+    check("Nutrition summary includes totals and targets objects",
+        $data && ref($data->{totals}) eq 'HASH' && ref($data->{targets}) eq 'HASH');
+}
+
+section("Nutrition summary: negative - no auth token");
+my $nutrition_summary_no_auth_res = $http->get("$BASE_URL/nutrition/summary");
+show($nutrition_summary_no_auth_res);
+check("Nutrition summary with no auth returns 401", $nutrition_summary_no_auth_res->{status} == 401);
+
+
+# ---------------------------------------------------------------
+# 20. Habits: definitions (full CRUD, archive-as-delete)
+# ---------------------------------------------------------------
+# NOTE: Habits uses soft-delete (sets archivedAt, keeps the row) so habit logs
+# don't get orphaned. The generic test_resource() "PATCH after delete returns 404"
+# check will always FAIL here by design - this is expected, not a bug.
+test_resource(
+    name            => 'Habits',
+    path            => 'habits',
+    create_payload  => { name => 'Meditate', cadence => 'daily', metricType => 'boolean' },
+    invalid_payload => { cadence => 'daily' },
+    patch_payload   => { name => 'Meditate (updated)' },
+    patch_field     => 'name',
+    patch_value     => 'Meditate (updated)',
+    soft_delete     => 1,
+);
+
+# ---------------------------------------------------------------
+# 21. Habits: Logs (date-keyed, not id-keyed - custom block)
+# ---------------------------------------------------------------
+section("21. Habits Logs: create a habit to log against");
+my $habit_res = $http->post("$BASE_URL/habits", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ name => 'Drink water', cadence => 'daily', metricType => 'boolean' }),
+});
+show($habit_res);
+my $habit_id;
+if ($habit_res->{status} == 201) {
+    my $data = eval { $json->decode($habit_res->{content}) };
+    $habit_id = $data->{id} if $data;
+}
+check("Habit created for log testing", $habit_id ? 1 : 0);
+
+if ($habit_id) {
+    section("Habits Logs: PUT /habits/:id/logs/:date (set to done)");
+    my $log_put_res = $http->request('PUT', "$BASE_URL/habits/$habit_id/logs/2026-09-01", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ status => 'done' }),
+    });
+    show($log_put_res);
+    check("Habits Logs PUT returns 200", $log_put_res->{status} == 200);
+
+    section("Habits Logs: PUT again on same date (overwrite to skipped)");
+    my $log_overwrite_res = $http->request('PUT', "$BASE_URL/habits/$habit_id/logs/2026-09-01", {
+        headers => auth_headers($token_a, 1),
+        content => $json->encode({ status => 'skipped' }),
+    });
+    show($log_overwrite_res);
+    check("Habits Logs PUT overwrite returns 200", $log_overwrite_res->{status} == 200);
+    if ($log_overwrite_res->{status} == 200) {
+        my $data = eval { $json->decode($log_overwrite_res->{content}) };
+        check("Habits Logs overwrite actually changed status to skipped", $data && $data->{status} eq 'skipped');
+    }
+
+    section("Habits Logs: GET /habits/:id/logs (list)");
+    my $log_list_res = $http->get("$BASE_URL/habits/$habit_id/logs", { headers => auth_headers($token_a, 0) });
+    show($log_list_res);
+    check("Habits Logs list returns 200", $log_list_res->{status} == 200);
+    if ($log_list_res->{status} == 200) {
+        my $data = eval { $json->decode($log_list_res->{content}) };
+        check("Habits Logs list has exactly one entry (overwrite, not duplicate)",
+            ref($data) eq 'ARRAY' && scalar(@$data) == 1);
+    }
+
+    section("Habits Logs: negative - no auth token");
+    my $log_no_auth_res = $http->get("$BASE_URL/habits/$habit_id/logs");
+    show($log_no_auth_res);
+    check("Habits Logs GET with no auth returns 401", $log_no_auth_res->{status} == 401);
+
+    if ($token_b) {
+        section("Habits Logs: isolation - user B cannot log against user A's habit");
+        my $log_b_res = $http->request('PUT', "$BASE_URL/habits/$habit_id/logs/2026-09-02", {
+            headers => auth_headers($token_b, 1),
+            content => $json->encode({ status => 'done' }),
+        });
+        show($log_b_res);
+        check("Habits Logs user B PUT on user A's habit returns 404", $log_b_res->{status} == 404);
+    }
+
+    section("Habits Logs: DELETE /habits/:id/logs/:date (clear back to unlogged)");
+    my $log_delete_res = $http->request('DELETE', "$BASE_URL/habits/$habit_id/logs/2026-09-01", { headers => auth_headers($token_a, 0) });
+    show($log_delete_res);
+    check("Habits Logs DELETE returns 204", $log_delete_res->{status} == 204);
+
+    section("Habits Logs: GET after delete (list should be empty)");
+    my $log_after_delete_res = $http->get("$BASE_URL/habits/$habit_id/logs", { headers => auth_headers($token_a, 0) });
+    show($log_after_delete_res);
+    if ($log_after_delete_res->{status} == 200) {
+        my $data = eval { $json->decode($log_after_delete_res->{content}) };
+        check("Habits Logs list is empty after delete", ref($data) eq 'ARRAY' && scalar(@$data) == 0);
+    }
+}
+
+# ---------------------------------------------------------------
+# 22. Habits: Summary (read-only)
+# ---------------------------------------------------------------
+section("22. GET /habits/summary");
+my $habits_summary_res = $http->get("$BASE_URL/habits/summary", { headers => auth_headers($token_a, 0) });
+show($habits_summary_res);
+check("Habits summary returns 200", $habits_summary_res->{status} == 200);
+if ($habits_summary_res->{status} == 200) {
+    my $data = eval { $json->decode($habits_summary_res->{content}) };
+    check("Habits summary includes a habits array", $data && ref($data->{habits}) eq 'ARRAY');
+}
+
+section("Habits summary: negative - no auth token");
+my $habits_summary_no_auth_res = $http->get("$BASE_URL/habits/summary");
+show($habits_summary_no_auth_res);
+check("Habits summary with no auth returns 401", $habits_summary_no_auth_res->{status} == 401);
 
 
 
