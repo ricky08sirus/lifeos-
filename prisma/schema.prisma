@@ -67,6 +67,8 @@ model User {
   financialGoals    FinancialGoal[]
   insurancePolicies Insurance[]
   netWorthSnapshots NetWorthSnapshot[]
+
+  documents Document[]
 }
 
 model Preference {
@@ -551,4 +553,21 @@ model NetWorthSnapshot {
   netPaise       Int
 
   @@index([userId, date])
+}
+
+
+
+model Document {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String
+  linkedType  String?  // "health" | "finance" | ... - which module it's attached to
+  linkedId    String?  // id of the record it's attached to, if any
+  storagePath String
+  url         String
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, linkedType])
 }

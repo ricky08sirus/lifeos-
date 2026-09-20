@@ -11,7 +11,11 @@ const fitnessRouter = require('./routes/fitness');
 const nutritionRouter = require('./routes/nutrition');
 const habitsRouter = require('./routes/habits');
 const financeRouter = require('./routes/finance');
-
+const analyticsRouter = require('./routes/analytics');
+const calendarRouter = require('./routes/calendar');
+const documentsRouter = require('./routes/documents');
+const reviewsRouter = require('./routes/reviews');
+const searchRouter = require('./routes/search');
 
 const app = express();
 app.use(cors({
@@ -31,7 +35,11 @@ app.use('/fitness', fitnessRouter);
 app.use('/nutrition', nutritionRouter);
 app.use('/habits', habitsRouter);
 app.use('/finance', financeRouter);
-
+app.use('/analytics', analyticsRouter);
+app.use('/calendar', calendarRouter);
+app.use('/documents', documentsRouter);
+app.use('/reviews', reviewsRouter);
+app.use('/search', searchRouter);
 
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', {

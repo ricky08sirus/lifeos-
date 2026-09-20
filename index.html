@@ -3234,7 +3234,14 @@ const NAV = [
 ]
 const MOBILE_PRIMARY = ['home', 'health', 'finance', 'analytics']
 
-const STATE_UI = { route: 'home', sub: null, focusExercise: null, sheet: null }
+const STATE_UI = {
+  route: 'home', sub: null, focusExercise: null, sheet: null,
+  remoteCalendar: null,      // { from, to, events } from GET /calendar
+  remoteReview: null,        // GET /reviews/weekly response
+  remoteInsights: null,      // GET /analytics/insights response
+  remoteSearchResults: null, // GET /search response
+  searchQuery: '',
+}
 
 /* ── API client (new) ─────────────────────────────────────────────────── */
 const API_BASE = 'http://localhost:3000'
@@ -3492,6 +3499,37 @@ async function loadAllData() {
 }
 
 
+/* ── Remote-backed features: Analytics, Calendar, Reviews, Search (new) ── */
+
+async function fetchCalendar(from, to) {
+  const q = new URLSearchParams({ from, to }).toString()
+  const data = await apiFetch(`/calendar?${q}`)
+  STATE_UI.remoteCalendar = data
+  return data
+}
+
+async function fetchWeeklyReview() {
+  const data = await apiFetch('/reviews/weekly')
+  STATE_UI.remoteReview = data
+  return data
+}
+
+async function fetchAnalyticsInsights() {
+  const data = await apiFetch('/analytics/insights')
+  STATE_UI.remoteInsights = data
+  return data
+}
+
+async function fetchSearch(query) {
+  if (query.trim().length < 2) {
+    STATE_UI.remoteSearchResults = null
+    return null
+  }
+  const data = await apiFetch(`/search?q=${encodeURIComponent(query.trim())}`)
+  STATE_UI.remoteSearchResults = data
+  return data
+}
+
 
 const $ = (sel) => document.querySelector(sel)
 const el = {
@@ -3545,6 +3583,18 @@ function go(route, sub) {
   STATE_UI.sub = sub || null
   location.hash = sub ? `${route}/${sub}` : route
   render()
+
+  if (route === 'calendar') {
+    const from = dateKey(new Date())
+    const to = dateKey(Date.now() + 30 * DAY)
+    fetchCalendar(from, to).then(render).catch(() => {})
+  }
+  if (route === 'review') {
+    fetchWeeklyReview().then(render).catch(() => {})
+  }
+  if (route === 'analytics') {
+    fetchAnalyticsInsights().then(render).catch(() => {})
+  }
 }
 
 function readHash() {
@@ -6322,6 +6372,26 @@ ANALYTICS_TABS.overview = function () {
         logged enough to say anything about.
       </p>
     </section>
+
+    <section>
+      ${sectionHead('Server-computed insights')}
+      <div class="card divide" style="margin-top:0.5rem">
+        ${STATE_UI.remoteInsights
+          ? (STATE_UI.remoteInsights.insights.length
+              ? STATE_UI.remoteInsights.insights.map((i) => `
+                <div class="card-pad">
+                  <div class="t-label semi">${esc(i.title)}</div>
+                  <div class="t-micro muted" style="margin-top:0.25rem;line-height:1rem">${esc(i.description)}</div>
+                  <div class="t-micro faint" style="margin-top:0.25rem">r = ${i.correlation} · ${i.strength} · n=${i.sampleSize}</div>
+                </div>`).join('')
+              : `<div class="empty"><h3>No correlations found yet</h3><p>Needs more overlapping days of data in both series.</p></div>`)
+          : `<div class="empty"><h3>Loading…</h3></div>`}
+      </div>
+      <p class="t-micro faint" style="padding:0.5rem 0.125rem">
+        Computed server-side from your actual database records — a separate, simpler check
+        alongside the client-side statistics above.
+      </p>
+    </section>
   </div>`
 }
 
@@ -7597,87 +7667,60 @@ document.addEventListener('click', (e) => {
 
 /* ─── Phase 5 views ─────────────────────────────────────────────────────── */
 
-VIEWS.calendar = function (sub) {
-  const offset = STATE_UI.calendarOffset || 0
-  const grid = CALENDAR.monthGrid(offset)
+VIEWS.calendar = function () {
   const today = dateKey(new Date())
-  const selected = STATE_UI.calendarSelected || today
-  const selectedEvents = CALENDAR.eventsFor(selected)
+  const data = STATE_UI.remoteCalendar
+
+  if (!data) {
+    return `
+    <header style="margin-bottom:1rem">
+      <h1 class="t-fig semi">Calendar</h1>
+      <p class="t-label muted">Loading…</p>
+    </header>
+    <div class="card"><div class="empty"><h3>Loading your calendar</h3></div></div>`
+  }
+
+  const byDate = {}
+  for (const e of data.events) {
+    const key = dateKey(e.date)
+    ;(byDate[key] = byDate[key] || []).push(e)
+  }
 
   const KIND = {
     workout: { icon: 'dumbbell', tone: 'acc' }, bill: { icon: 'rupee', tone: 'cau' },
-    emi: { icon: 'rupee', tone: 'cau' }, sip: { icon: 'chart', tone: 'pos' },
-    subscription: { icon: 'repeat', tone: '' }, card: { icon: 'rupee', tone: 'neg' },
-    appointment: { icon: 'heart', tone: 'acc' }, insurance: { icon: 'file', tone: 'cau' },
+    emi: { icon: 'rupee', tone: 'cau' }, appointment: { icon: 'heart', tone: 'acc' },
   }
 
-  const monthOutflow = grid.cells.filter(Boolean)
-    .flatMap((c) => c.events).reduce((sum, e) => sum + (e.amountPaise || 0), 0)
+  const totalOwed = data.events.reduce((s, e) => s + (e.amountPaise || 0), 0)
 
   return `
   <header style="margin-bottom:1rem">
     <h1 class="t-fig semi">Calendar</h1>
-    <p class="t-label muted">Training, bills, EMIs and appointments on one timeline</p>
+    <p class="t-label muted">Next 30 days — training, bills, EMIs and appointments</p>
   </header>
 
-  <div class="card card-pad" style="margin-bottom:1rem">
-    <div class="row-between" style="margin-bottom:0.75rem">
-      <button class="btn btn-ghost btn-icon" data-cal="${offset - 1}" aria-label="Previous month">‹</button>
-      <span class="t-label semi">${grid.label}</span>
-      <button class="btn btn-ghost btn-icon" data-cal="${offset + 1}" aria-label="Next month">›</button>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:0.25rem">
-      ${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => `
-        <div class="t-micro faint" style="text-align:center">${d}</div>`).join('')}
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
-      ${grid.cells.map((cell) => {
-        if (!cell) return '<div></div>'
-        const isToday = cell.date === today
-        const isSelected = cell.date === selected
-        // Dots rather than counts: at this size a number is unreadable and
-        // "is anything happening" is the only question a month grid answers.
-        const dots = [...new Set(cell.events.map((e) => KIND[e.kind]?.tone || ''))].slice(0, 3)
-        return `<button data-calday="${cell.date}"
-          style="aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-                 background:${isSelected ? 'hsl(var(--accent))' : isToday ? 'hsl(var(--accent-soft))' : 'transparent'};
-                 color:${isSelected ? 'hsl(var(--accent-ink))' : 'inherit'}"
-          aria-label="${FMT.date(cell.date)}, ${cell.events.length} events"
-          aria-pressed="${isSelected}">
-          <span class="t-label fig ${isToday && !isSelected ? 'semi acc' : ''}">${cell.day}</span>
-          <span style="display:flex;gap:2px;height:4px">
-            ${dots.map((t) => `<i style="width:4px;height:4px;border-radius:999px;background:${
-              isSelected ? 'hsl(var(--accent-ink))' : `hsl(var(--${t || 'ink-faint'}))`};display:block"></i>`).join('')}
-          </span>
-        </button>`
-      }).join('')}
-    </div>
-  </div>
-
   <div class="row-between card-pad" style="background:hsl(var(--canvas));border:1px solid hsl(var(--line));border-radius:0.75rem;margin-bottom:1rem">
-    <span class="t-label muted">Money leaving this month</span>
-    <span class="t-body fig semi">${FMT.money(monthOutflow)}</span>
+    <span class="t-label muted">Money due</span>
+    <span class="t-body fig semi">${FMT.money(totalOwed)}</span>
   </div>
 
   <section>
-    ${sectionHead(FMT.relDay(selected) + ' · ' + FMT.date(selected))}
+    ${sectionHead(`${data.events.length} upcoming events`)}
     <div class="card divide" style="margin-top:0.5rem">
-      ${selectedEvents.length ? selectedEvents.map((e) => {
+      ${data.events.length ? data.events.map((e) => {
         const k = KIND[e.kind] || { icon: 'calendar', tone: '' }
         return `<div class="card-pad row" style="gap:0.75rem">
           <span class="badge ${k.tone ? 'badge-' + k.tone : ''}" style="width:30px;height:30px;padding:0;justify-content:center;border-radius:9px;flex:none">
             ${ICON(k.icon, 15, 2)}
           </span>
           <div style="min-width:0;flex:1">
-            <div class="t-label semi">${esc(e.label)}</div>
-            <div class="t-micro faint">${esc(e.kind)}${e.meta ? ` · ${esc(e.meta)}` : ''}</div>
+            <div class="t-label semi">${esc(e.title || e.name)}</div>
+            <div class="t-micro faint">${esc(e.kind)} · ${FMT.relDay(dateKey(e.date))}</div>
           </div>
           ${e.amountPaise ? `<span class="t-label fig semi" style="flex:none">${FMT.money(e.amountPaise)}</span>` : ''}
         </div>`
       }).join('')
-      : `<div class="empty"><h3>Nothing scheduled</h3><p>No training, bills or appointments on this day.</p></div>`}
+      : `<div class="empty"><h3>Nothing scheduled</h3><p>No training, bills or appointments in the next 30 days.</p></div>`}
     </div>
   </section>`
 }
@@ -7761,6 +7804,22 @@ VIEWS.review = function () {
       ${scoreCard('rfin', 'Finances', FSEL.disciplineScore(), 'last month')}
     </div>
 
+    <section>
+      ${sectionHead('Backend summary (this week)')}
+      <div class="card card-pad" style="margin-top:0.5rem">
+        ${STATE_UI.remoteReview ? `
+          <div class="grid-3">
+            ${statCard('Sessions', `<span class="t-fig fig">${STATE_UI.remoteReview.summary.sessionsCompleted}</span>`, `of ${STATE_UI.remoteReview.summary.sessionsTotal} planned`)}
+            ${statCard('Meals logged', `<span class="t-fig fig">${STATE_UI.remoteReview.summary.mealsLogged}</span>`, '')}
+            ${statCard('Habit completion', `<span class="t-fig fig">${STATE_UI.remoteReview.summary.habitCompletionRate ?? '—'}%</span>`, '')}
+          </div>
+          <p class="t-micro faint" style="margin-top:0.75rem">
+            ${STATE_UI.remoteReview.weekStart} to ${STATE_UI.remoteReview.weekEnd} · computed server-side from your database
+          </p>
+        ` : `<p class="t-label muted">Loading server-computed summary…</p>`}
+      </div>
+    </section>
+
     ${attention.length ? `
       <section>
         ${sectionHead(`Worth your attention · ${attention.length}`)}
@@ -7810,9 +7869,11 @@ VIEWS.review = function () {
 
 VIEWS.search = function () {
   const query = STATE_UI.searchQuery || ''
-  const results = searchEverything(query)
+  const data = STATE_UI.remoteSearchResults
   const grouped = {}
-  for (const r of results) (grouped[r.kind] = grouped[r.kind] || []).push(r)
+  if (data && data.results) {
+    for (const r of data.results) (grouped[r.type] = grouped[r.type] || []).push(r)
+  }
 
   return `
   <header style="margin-bottom:1rem">
@@ -7822,36 +7883,34 @@ VIEWS.search = function () {
 
   <div class="field" style="margin-bottom:1rem">
     <input type="search" id="searchInput" value="${esc(query)}" autofocus
-           placeholder="Meals, transactions, exercises, accounts…" aria-label="Search your records">
+           placeholder="Meals, transactions, workouts, habits…" aria-label="Search your records">
   </div>
 
   ${query.trim().length < 2
     ? `<div class="card"><div class="empty">
         <h2>Type at least two characters</h2>
-        <p>Searches your meals, transactions, workouts, exercises, habits, accounts, loans,
-           investments, goals and medication.</p>
+        <p>Searches your meals, transactions, workouts, habits, and medications.</p>
       </div></div>`
-    : results.length === 0
-      ? `<div class="card"><div class="empty">
-          <h2>Nothing found for "${esc(query)}"</h2>
-          <p>This only searches records you have entered, not the shared food or exercise library.</p>
-        </div></div>`
-      : Object.entries(grouped).map(([kind, items]) => `
-        <section style="margin-bottom:1rem">
-          ${sectionHead(`${kind} · ${items.length}`)}
-          <div class="card divide" style="margin-top:0.5rem">
-            ${items.slice(0, 8).map((r) => `
-              <button class="card-pad row-between" style="width:100%;text-align:left" data-act="${esc(r.act)}">
-                <div style="min-width:0">
-                  <div class="t-label semi">${esc(r.label)}</div>
-                  <div class="t-micro faint">${esc(r.meta)}</div>
-                </div>
-                <span class="faint" style="flex:none">›</span>
-              </button>`).join('')}
-          </div>
-        </section>`).join('')}`
+    : !data
+      ? `<div class="card"><div class="empty"><h3>Searching…</h3></div></div>`
+      : data.results.length === 0
+        ? `<div class="card"><div class="empty">
+            <h2>Nothing found for "${esc(query)}"</h2>
+          </div></div>`
+        : Object.entries(grouped).map(([type, items]) => `
+          <section style="margin-bottom:1rem">
+            ${sectionHead(`${type} · ${items.length}`)}
+            <div class="card divide" style="margin-top:0.5rem">
+              ${items.map((r) => `
+                <div class="card-pad row-between">
+                  <div style="min-width:0">
+                    <div class="t-label semi">${esc(r.label)}</div>
+                    ${r.date ? `<div class="t-micro faint">${FMT.relDay(dateKey(r.date))}</div>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>
+          </section>`).join('')}`
 }
-
 /* ─── Phase 5 wiring ────────────────────────────────────────────────────── */
 
 NAV.splice(6, 0, ['review', 'Review', 'check'], ['search', 'Search', 'info'])
@@ -7867,15 +7926,21 @@ document.addEventListener('click', (e) => {
   if (day) { STATE_UI.calendarSelected = day.dataset.calday; render(); return }
 })
 
+let searchDebounce = null
 document.addEventListener('input', (e) => {
   if (e.target.id === 'searchInput') {
     STATE_UI.searchQuery = e.target.value
-    const host = document.querySelector('#view')
-    if (host) {
-      host.innerHTML = VIEWS.search()
-      const again = document.querySelector('#searchInput')
-      if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length) }
-    }
+    clearTimeout(searchDebounce)
+    searchDebounce = setTimeout(() => {
+      fetchSearch(STATE_UI.searchQuery).then(() => {
+        const host = document.querySelector('#view')
+        if (host) {
+          host.innerHTML = VIEWS.search()
+          const again = document.querySelector('#searchInput')
+          if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length) }
+        }
+      }).catch(() => {})
+    }, 350) // debounced so it doesn't hit the API on every keystroke
   }
 })
 
@@ -7896,7 +7961,16 @@ SEL.attention = function () {
 loadAuth()
 if (AUTH.accessToken) {
   loadAllData()
-    .then(() => { readHash(); render() })
+    .then(() => {
+      readHash()
+      render()
+      // If we booted straight into one of the remote-backed routes (e.g. from a bookmark), fetch its data too.
+      if (STATE_UI.route === 'calendar') {
+        fetchCalendar(dateKey(new Date()), dateKey(Date.now() + 30 * DAY)).then(render).catch(() => {})
+      }
+      if (STATE_UI.route === 'review') fetchWeeklyReview().then(render).catch(() => {})
+      if (STATE_UI.route === 'analytics') fetchAnalyticsInsights().then(render).catch(() => {})
+    })
     .catch(() => { clearAuth(); STATE_UI.route = 'login'; render() })
 } else {
   STATE_UI.route = 'login'
