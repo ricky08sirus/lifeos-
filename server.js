@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors'); 
 const logger = require('./lib/logger');
 const requestLogger = require('./middleware/requestLogger');
 const authRouter = require('./routes/auth');
@@ -13,7 +14,12 @@ const financeRouter = require('./routes/finance');
 
 
 const app = express();
-
+app.use(cors({
+  origin: 'http://127.0.0.1:5500', 
+  credentials: true                 
+}));
+// app.use(cors({ origin: 'http://127.0.0.1:5500' }));
+//http://127.0.0.1:5500/
 app.use(express.json());
 app.use(requestLogger); 
 

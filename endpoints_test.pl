@@ -1263,6 +1263,197 @@ my $sub_no_auth_res = $http->get("$BASE_URL/finance/subscriptions");
 show($sub_no_auth_res);
 check("Finance Subscriptions GET with no auth returns 401", $sub_no_auth_res->{status} == 401);
 
+
+
+# ---------------------------------------------------------------
+# 30. Finance: Investments (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Investments',
+    path            => 'finance/investments',
+    create_payload  => { name => 'Nifty 50 Index', kind => 'mutual_fund', units => 100.5, avgCostPaise => 2500, currentNavPaise => 2800, sipPaise => 500000, sipDay => 5, since => '2024-01-01T00:00:00.000Z' },
+    invalid_payload => { name => 'Nifty 50 Index', kind => 'mutual_fund' },  # missing units, avgCostPaise, currentNavPaise, since
+    patch_payload   => { currentNavPaise => 2950 },
+    patch_field     => 'currentNavPaise',
+    patch_value     => 2950,
+);
+
+
+# ---------------------------------------------------------------
+# 31. Finance: Assets (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Assets',
+    path            => 'finance/assets',
+    create_payload  => { name => 'Maruti Baleno', kind => 'vehicle', valuePaise => 52000000, acquiredOn => '2023-06-01T00:00:00.000Z', depreciating => JSON::PP::true },
+    invalid_payload => { name => 'Maruti Baleno' },  # missing kind, valuePaise, acquiredOn
+    patch_payload   => { valuePaise => 48000000 },
+    patch_field     => 'valuePaise',
+    patch_value     => 48000000,
+);
+
+
+# ---------------------------------------------------------------
+# 32. Finance: Goals (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Goals',
+    path            => 'finance/goals',
+    create_payload  => { name => 'Emergency fund', targetPaise => 60000000, savedPaise => 15000000, targetDate => '2027-01-01T00:00:00.000Z', priority => 1 },
+    invalid_payload => { savedPaise => 15000000 },  # missing name and targetPaise
+    patch_payload   => { savedPaise => 20000000 },
+    patch_field     => 'savedPaise',
+    patch_value     => 20000000,
+);
+
+
+
+# ---------------------------------------------------------------
+# 33. Finance: Insurance (full CRUD)
+# ---------------------------------------------------------------
+test_resource(
+    name            => 'Finance Insurance',
+    path            => 'finance/insurance',
+    create_payload  => { kind => 'term_life', provider => 'HDFC Life', coverPaise => 1000000000, premiumPaise => 2574000, renewalOn => '2027-03-01T00:00:00.000Z', frequency => 'annual' },
+    invalid_payload => { kind => 'term_life', provider => 'HDFC Life' },  # missing coverPaise, premiumPaise, renewalOn, frequency
+    patch_payload   => { premiumPaise => 2700000 },
+    patch_field     => 'premiumPaise',
+    patch_value     => 2700000,
+);
+
+
+
+# ---------------------------------------------------------------
+# 34. Finance: Net Worth (GET history + POST snapshot)
+# ---------------------------------------------------------------
+section("34. Finance Net Worth: GET /finance/net-worth (empty or existing history)");
+my $nw_get_res = $http->get("$BASE_URL/finance/net-worth", { headers => auth_headers($token_a, 0) });
+show($nw_get_res);
+check("Finance Net Worth GET returns 200", $nw_get_res->{status} == 200);
+if ($nw_get_res->{status} == 200) {
+    my $data = eval { $json->decode($nw_get_res->{content}) };
+    check("Finance Net Worth GET response is a bare JSON array", ref($data) eq 'ARRAY');
+}
+
+section("Finance Net Worth: POST /finance/net-worth/snapshot (create a snapshot)");
+my $nw_snap_res = $http->post("$BASE_URL/finance/net-worth/snapshot", {
+    headers => auth_headers($token_a, 1),
+    content => '{}',
+});
+show($nw_snap_res);
+check("Finance Net Worth snapshot returns 201", $nw_snap_res->{status} == 201);
+if ($nw_snap_res->{status} == 201) {
+    my $data = eval { $json->decode($nw_snap_res->{content}) };
+    check("Finance Net Worth snapshot includes netPaise", $data && exists $data->{netPaise});
+}
+
+section("Finance Net Worth: GET again (should now include the new snapshot)");
+my $nw_get2_res = $http->get("$BASE_URL/finance/net-worth", { headers => auth_headers($token_a, 0) });
+show($nw_get2_res);
+check("Finance Net Worth GET after snapshot returns 200", $nw_get2_res->{status} == 200);
+if ($nw_get2_res->{status} == 200) {
+    my $data = eval { $json->decode($nw_get2_res->{content}) };
+    check("Finance Net Worth history now has at least one entry",
+        ref($data) eq 'ARRAY' && scalar(@$data) >= 1);
+}
+
+section("Finance Net Worth: negative - no auth token");
+my $nw_no_auth_res = $http->get("$BASE_URL/finance/net-worth");
+show($nw_no_auth_res);
+check("Finance Net Worth GET with no auth returns 401", $nw_no_auth_res->{status} == 401);
+
+
+
+# ---------------------------------------------------------------
+# 35. Finance: Budgets Summary (read-only)
+# ---------------------------------------------------------------
+section("35. GET /finance/budgets/summary");
+my $budget_summary_res = $http->get("$BASE_URL/finance/budgets/summary", { headers => auth_headers($token_a, 0) });
+show($budget_summary_res);
+check("Finance Budgets Summary returns 200", $budget_summary_res->{status} == 200);
+if ($budget_summary_res->{status} == 200) {
+    my $data = eval { $json->decode($budget_summary_res->{content}) };
+    check("Finance Budgets Summary includes categories array",
+        $data && ref($data->{categories}) eq 'ARRAY');
+}
+
+section("Finance Budgets Summary: negative - no auth token");
+my $budget_summary_no_auth_res = $http->get("$BASE_URL/finance/budgets/summary");
+show($budget_summary_no_auth_res);
+check("Finance Budgets Summary with no auth returns 401", $budget_summary_no_auth_res->{status} == 401);
+
+
+
+# ---------------------------------------------------------------
+# 36. Finance: Upcoming Dues (read-only)
+# ---------------------------------------------------------------
+section("36. GET /finance/upcoming-dues");
+my $dues_res = $http->get("$BASE_URL/finance/upcoming-dues?days=14", { headers => auth_headers($token_a, 0) });
+show($dues_res);
+check("Finance Upcoming Dues returns 200", $dues_res->{status} == 200);
+if ($dues_res->{status} == 200) {
+    my $data = eval { $json->decode($dues_res->{content}) };
+    check("Finance Upcoming Dues includes items array and totalPaise",
+        $data && ref($data->{items}) eq 'ARRAY' && exists $data->{totalPaise});
+}
+
+section("Finance Upcoming Dues: negative - no auth token");
+my $dues_no_auth_res = $http->get("$BASE_URL/finance/upcoming-dues");
+show($dues_no_auth_res);
+check("Finance Upcoming Dues with no auth returns 401", $dues_no_auth_res->{status} == 401);
+
+
+
+# ---------------------------------------------------------------
+# 37. Finance: Simulate (debt payoff simulation)
+# ---------------------------------------------------------------
+section("37. Finance Simulate: setup - create a debt to simulate against");
+my $sim_debt_res = $http->post("$BASE_URL/finance/debts", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({
+        name => 'Simulation test loan', kind => 'personal_loan', lender => 'Test Bank',
+        principalPaise => 30000000, annualRatePct => 12, termMonths => 24,
+        startedOn => '2026-01-01T00:00:00.000Z', emiPaise => 1400000, paidMonths => 2,
+    }),
+});
+show($sim_debt_res);
+my $sim_debt_id;
+if ($sim_debt_res->{status} == 201) {
+    my $data = eval { $json->decode($sim_debt_res->{content}) };
+    $sim_debt_id = $data->{id} if $data;
+}
+check("Simulate setup - debt created", $sim_debt_id ? 1 : 0);
+
+section("Finance Simulate: POST /finance/simulate (snowball)");
+my $sim_res = $http->post("$BASE_URL/finance/simulate", {
+    headers => auth_headers($token_a, 1),
+    content => $json->encode({ strategy => 'snowball', extraMonthlyPaise => 500000 }),
+});
+show($sim_res);
+check("Finance Simulate returns 200", $sim_res->{status} == 200);
+if ($sim_res->{status} == 200) {
+    my $data = eval { $json->decode($sim_res->{content}) };
+    check("Finance Simulate response includes months and totalInterestPaise",
+        $data && exists $data->{months} && exists $data->{totalInterestPaise});
+}
+
+section("Finance Simulate: negative - no auth token");
+my $sim_no_auth_res = $http->post("$BASE_URL/finance/simulate", {
+    headers => { 'Content-Type' => 'application/json' },
+    content => $json->encode({ strategy => 'snowball' }),
+});
+show($sim_no_auth_res);
+check("Finance Simulate with no auth returns 401", $sim_no_auth_res->{status} == 401);
+
+# cleanup
+if ($sim_debt_id) {
+    $http->request('DELETE', "$BASE_URL/finance/debts/$sim_debt_id", { headers => auth_headers($token_a, 0) });
+}
+
+
+
+
+
 # ---------------------------------------------------------------
 section("SUMMARY");
 # ---------------------------------------------------------------

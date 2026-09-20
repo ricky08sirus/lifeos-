@@ -61,6 +61,12 @@ model User {
   debts         Debt[]
   bills         Bill[]
   subscriptions Subscription[]
+
+  investments       Investment[]
+  assets            Asset[]
+  financialGoals    FinancialGoal[]
+  insurancePolicies Insurance[]
+  netWorthSnapshots NetWorthSnapshot[]
 }
 
 model Preference {
@@ -471,4 +477,78 @@ model Subscription {
   createdAt        DateTime @default(now())
 
   @@index([userId])
+}
+
+
+model Investment {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  name           String
+  kind           String   // "mutual_fund" | "stock" | "epf" | "ppf" | ...
+  units          Float
+  avgCostPaise   Int
+  currentNavPaise Int
+  sipPaise       Int      @default(0)
+  sipDay         Int?
+  since          DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Asset {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  name          String
+  kind          String   // "vehicle" | "precious" | ...
+  valuePaise    Int
+  acquiredOn    DateTime
+  depreciating  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model FinancialGoal {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  name           String
+  targetPaise    Int
+  savedPaise     Int       @default(0)
+  targetDate     DateTime?
+  priority       Int       @default(1)
+  linkedAccountId String?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Insurance {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  kind         String   // "term_life" | "health" | "vehicle"
+  provider     String
+  coverPaise   Int
+  premiumPaise Int
+  renewalOn    DateTime
+  frequency    String   // "annual" | "monthly"
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model NetWorthSnapshot {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  date           DateTime @default(now())
+  assetsPaise    Int
+  liabilitiesPaise Int
+  netPaise       Int
+
+  @@index([userId, date])
 }
