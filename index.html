@@ -2111,6 +2111,24 @@ HEALTH_TABS.overview = function () {
   const bandLabel = { under: 'Below 18.5', healthy: '18.5 – 25', over: '25 – 30', obese: 'Above 30' }
 
   return `<div class="stack">
+    ${STATE_UI.remoteHealthSummary ? `
+    <div class="card card-pad">
+      <div class="caps" style="margin-bottom:0.5rem">Server-computed (cross-check)</div>
+      <div class="grid-3">
+        <div style="text-align:center">
+          <div class="t-micro muted">BMI</div>
+          <div class="t-body fig semi">${STATE_UI.remoteHealthSummary.bmi ?? '—'}</div>
+        </div>
+        <div style="text-align:center">
+          <div class="t-micro muted">7-day avg</div>
+          <div class="t-body fig semi">${STATE_UI.remoteHealthSummary.weightTrend7Day ? FMT.weight(STATE_UI.remoteHealthSummary.weightTrend7Day) : '—'}</div>
+        </div>
+        <div style="text-align:center">
+          <div class="t-micro muted">Resting HR</div>
+          <div class="t-body fig semi">${STATE_UI.remoteHealthSummary.latestVitals?.restingHeartRate ?? '—'}</div>
+        </div>
+      </div>
+    </div>` : ''}
     <div class="lg-grid-2">
       <div class="card card-pad stack-s">
         <div class="row-between">
@@ -2171,7 +2189,7 @@ HEALTH_TABS.overview = function () {
     </section>
 
     <section>
-      ${sectionHead('Upcoming')}
+      ${sectionHead('Upcoming', 'Add', 'sheet:appointment')}
       <div class="card divide" style="margin-top:0.5rem">
         ${S.appointments.length ? S.appointments.map((a) => `
           <div class="card-pad row-between">
@@ -2376,7 +2394,7 @@ HEALTH_TABS.meds = function () {
 
   return `<div class="stack">
     <section>
-      ${sectionHead('Prescribed medication', 'Add', 'noop')}
+      ${sectionHead('Prescribed medication', 'Add', 'sheet:medication')}
       <div class="card divide" style="margin-top:0.5rem">
         ${prescribed.length ? prescribed.map(row).join('')
           : `<div class="empty"><h3>No prescribed medication recorded</h3>
@@ -2385,7 +2403,7 @@ HEALTH_TABS.meds = function () {
     </section>
 
     <section>
-      ${sectionHead('Supplements', 'Add', 'noop')}
+      ${sectionHead('Supplements', 'Add', 'sheet:medication')}
       <div class="card divide" style="margin-top:0.5rem">${supplements.map(row).join('')}</div>
     </section>
 
@@ -3094,6 +3112,61 @@ const SHEETS = {
       }
     },
   },
+    medication: {
+    title: 'Add medication or supplement',
+    desc: 'Prescribed items and supplements are kept separate.',
+    fields: [
+      { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'Vitamin D3',
+        validate: (v) => (!v || v.trim().length < 2 ? 'Enter a name.' : null) },
+      { name: 'isPrescription', label: 'Type', type: 'select', required: true,
+        options: [['false', 'Supplement'], ['true', 'Prescribed']] },
+      { name: 'dosage', label: 'Dosage', type: 'text', placeholder: '1 capsule' },
+      { name: 'frequency', label: 'Frequency', type: 'text', placeholder: 'Daily' },
+      { name: 'quantityLeft', label: 'Quantity left', type: 'number', inputmode: 'numeric', placeholder: '30' },
+      { name: 'refillOn', label: 'Refill by', type: 'date' },
+    ],
+    async submitApi(vals) {
+      return apiFetch('/health/medications', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: vals.name.trim(),
+          isPrescription: vals.isPrescription === 'true',
+          dosage: vals.dosage || null,
+          frequency: vals.frequency || null,
+          quantityLeft: vals.quantityLeft ? parseInt(vals.quantityLeft, 10) : null,
+          refillOn: vals.refillOn || null,
+        }),
+      })
+    },
+    successMessage: (vals) => `${vals.name.trim()} added`,
+  },
+
+  appointment: {
+    title: 'Book an appointment',
+    desc: 'Shows up on Health and on the calendar.',
+    fields: [
+      { name: 'title', label: 'What is it', type: 'text', required: true, placeholder: 'Annual check-up',
+        validate: (v) => (!v || v.trim().length < 2 ? 'Enter a title.' : null) },
+      { name: 'scheduledAt', label: 'Date', type: 'date', required: true,
+        validate: (v) => (!v ? 'Pick a date.' : null) },
+      { name: 'provider', label: 'Provider', type: 'text', placeholder: 'Dr. Meera Rao' },
+      { name: 'location', label: 'Location', type: 'text', placeholder: 'Apollo, Jayanagar' },
+    ],
+    async submitApi(vals) {
+      return apiFetch('/health/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: vals.title.trim(),
+          scheduledAt: vals.scheduledAt,
+          provider: vals.provider || null,
+          location: vals.location || null,
+        }),
+      })
+    },
+    successMessage: (vals) => `${vals.title.trim()} booked`,
+  },
+
+  
 
   workout: {
     title: 'Log today\'s workout',
@@ -3167,7 +3240,8 @@ function renderSheet(key) {
   if (spec.custom) {
     const groups = [
       ['Health', [['sheet:weight', 'scale', 'Record weight'], ['sheet:sleep', 'moon', 'Log sleep'],
-                  ['sheet:measurement', 'scale', 'Measurement'], ['sheet:vital', 'heart', 'Vital reading']]],
+                  ['sheet:measurement', 'scale', 'Measurement'], ['sheet:vital', 'heart', 'Vital reading'],
+                  ['sheet:medication', 'pill', 'Medication'], ['sheet:appointment', 'calendar', 'Appointment']]],
       ['Food and water', [['sheet:meal', 'utensils', 'Add meal'], ['sheet:water', 'droplet', 'Add water']]],
       ['Training', [['sheet:workout', 'dumbbell', 'Log workout'], ['goto:habits', 'repeat', 'Habit check-in']]],
       ['Money', [['sheet:expense', 'rupee', 'Add expense'], ['sheet:affordability', 'rupee', 'Can I afford it?']]],
@@ -3256,6 +3330,7 @@ const STATE_UI = {
   remoteInsights: null,      // GET /analytics/insights response
   remoteSearchResults: null, // GET /search response
   remoteNutritionSummary: null, // GET /nutrition/summary response
+  remoteHealthSummary: null, // GET /health/summary response
   searchQuery: '',
 }
 
@@ -3553,6 +3628,14 @@ async function fetchNutritionSummary(date) {
   return data
 }
 
+async function fetchHealthSummary() {
+  const data = await apiFetch('/health/summary')
+  STATE_UI.remoteHealthSummary = data
+  return data
+}
+
+
+
 
 const $ = (sel) => document.querySelector(sel)
 const el = {
@@ -3620,6 +3703,9 @@ function go(route, sub) {
   }
   if (route === 'nutrition') {
     fetchNutritionSummary(dateKey(new Date())).then(render).catch(() => {})
+  }
+  if (route === 'health') {
+    fetchHealthSummary().then(render).catch(() => {})
   }
 }
 
@@ -6962,6 +7048,17 @@ const DELETABLE = {
       return () => S.medications.splice(idx, 0, removed)
     },
   },
+  appointment: {
+    label: 'appointment',
+    find: (id) => S.appointments.find((a) => a.id === id),
+    describe: (a) => `${esc(a.title)} on ${FMT.date(a.scheduledAt)}`,
+    remove: (id) => {
+      const idx = S.appointments.findIndex((a) => a.id === id)
+      const removed = S.appointments[idx]
+      S.appointments.splice(idx, 1)
+      return () => S.appointments.splice(idx, 0, removed)
+    },
+  },
 }
 
 /* The trailing control on every owned row. 44px, always in the same place,
@@ -7030,6 +7127,8 @@ async function deleteItem(kind, id) {
     sleep: (i) => `/health/sleep/${i}`,
     measurement: (i) => `/health/measurements/${i}`,
     vital: (i) => `/health/vitals/${i}`,
+    medication: (i) => `/health/medications/${i}`,
+    appointment: (i) => `/health/appointments/${i}`,
     session: (i) => `/fitness/sessions/${i}`,
     habit: (i) => `/habits/${i}`,
     transaction: (i) => `/finance/transactions/${i}`,
